@@ -6,7 +6,7 @@ HomeCar is an open-source Android application that provides direct access to a H
 
 The goal is simple:
 
-**Car → HomeCar → Home Assistant**
+**Car â†’ HomeCar â†’ Home Assistant**
 
 No media browser.  
 No playlists.  
@@ -105,7 +105,7 @@ Compatibility with physical vehicles can depend on:
 
 Download the latest universal APK from:
 
-**Releases → Assets**
+**Releases â†’ Assets**
 
 File format:
 
@@ -299,4 +299,4 @@ Android Auto interfaces should only be configured or operated when it is safe an
 
 ---
 
-**HomeCar — Your Home Assistant dashboard, in your car.**
+**HomeCar â€” Your Home Assistant dashboard, in your car.**
