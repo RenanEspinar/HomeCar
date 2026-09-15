@@ -1,72 +1,302 @@
-## !!!Be aware of scam!!! The sites like https :// fermata-auto . com  are 100% scam. This app is free and opensource!
+# HomeCar
 
+### Home Assistant on Android Auto
 
-## Fermata Media Player
-[![Download the latest APK](https://img.shields.io/github/v/release/AndreyPavlenko/Fermata?label=Download%20APK&logo=github&style=for-the-badge)](https://github.com/AndreyPavlenko/Fermata/releases/latest)
+HomeCar is an open-source Android application that provides direct access to a Home Assistant dashboard from Android Auto through a dedicated full-screen WebView interface.
 
-## About
-Fermata Media Player is a free, open source audio, video and TV player with a simple and intuitive interface. It is focused on playing media files organized in folders and playlists.
+The goal is simple:
 
-Supported features:
+**Car → HomeCar → Home Assistant**
 
-* Play media files organized in folders
-* IPTV addon with support for XMLTV EPG and Catchup
-* Remembers the last played track and position for each folder
-* Support for favorites and playlists
-* Support for CUE and M3U playlists
-* Support for bookmarks
-* Audio effects: Equalizer, Bass/Volume Boost and Virtualizer
-* Configure audio effects for individual tracks and folders
-* Configure playback speed for individual tracks and folders
-* Customizable titles and subtitles
-* Support for Android Auto
-* Support for Android TV
-* Show favorites and playlists on Android TV home screen
-* Pluggable media engines: MediaPlayer, ExoPlayer and VLC
-* Video player with support for subtitles and audio streams (VLC Engine only)
+No media browser.  
+No playlists.  
+No unnecessary menus.  
+Just your dashboard.
 
-## Building the project
-* Download and install the latest Android SDK or Android Studio from https://developer.android.com/studio/
-* Set the environment variable ANDROID_SDK_ROOT pointing to the SDK directory
-```bash
-export ANDROID_SDK_ROOT=<path to android SDK>
-```
+---
 
-### Clone the repository
-```bash
-git clone --recurse-submodules https://github.com/AndreyPavlenko/Fermata.git
-cd Fermata
-```
+## Features
 
-### Build AAB
-```bash
-./gradlew bundleAutoRelease -PAPP_ID_SFX=.type.your.pkg.sfx.here
-find $PWD -name *.aab
-```
+- Home Assistant dashboard directly inside Android Auto
+- Full-screen WebView interface
+- Single HomeCar entry in the Android Auto launcher
+- Configurable Home Assistant server
+- Persistent URL configuration
+- Same server configuration on phone and Android Auto
+- HTTPS domain support
+- Local HTTP/IP support
+- Floating settings button
+- Session and WebView persistence
+- Android Auto DHU support
+- Universal APK build support
 
-### Build APK
-```bash
-./gradlew bundleAutoRelease -PAPP_ID_SFX=.type.your.pkg.sfx.here
-find $PWD -name *.apk
-```
+---
 
-### Building in docker
-```bash
-docker run -ti --name Fermata andreypavlenko/fermata
-```
-Enter the requested key alias and password, when prompted.
-Build the required package using the above commands.
-To copy the built package to the host machine, open a new terminal and run:
-```bash
-docker cp Fermata:/home/mobiledevops/Fermata/fermata/build/outputs/bundle/autoRelease/ .
-```
+## Use cases
 
+HomeCar can be used as an in-car interface for:
 
-## Donation
-If you like the application, please consider making a donation:
+- Garage doors
+- Gates
+- Lights
+- Security cameras
+- Alarm systems
+- Climate control
+- Home status
+- Presence information
+- Energy monitoring
+- Custom Home Assistant dashboards
 
-[PayPal](https://www.paypal.com/donate/?hosted_button_id=NP5Q3YDSCJ98N)
+The interface displayed by HomeCar is completely controlled by your Home Assistant dashboard.
 
-[CloudTips](https://pay.cloudtips.ru/p/a03a73da)
+---
 
-[Yandex Money](https://money.yandex.ru/to/410014661137336)
+## Configuration
+
+Open HomeCar and tap the settings button.
+
+Enter your Home Assistant address.
+
+Examples:
+
+    https://home.example.com/
+
+or:
+
+    http://192.168.1.100:8123/
+
+If no protocol is entered, HomeCar automatically assumes HTTPS.
+
+Example:
+
+    myhome.example.com
+
+becomes:
+
+    https://myhome.example.com/
+
+The configured server is stored locally and reused automatically.
+
+---
+
+## Android Auto
+
+HomeCar provides a dedicated Android Auto interface that opens the configured Home Assistant dashboard.
+
+The current HomeCar build removes the unused media and mirroring launcher entries, leaving a single:
+
+    HomeCar
+
+entry in Android Auto.
+
+HomeCar has been tested using the Android Auto Desktop Head Unit emulator.
+
+Compatibility with physical vehicles can depend on:
+
+- Android version
+- Android Auto version
+- Vehicle/head unit
+- Installation method
+- Android Auto developer settings
+
+---
+
+## Installation
+
+Download the latest universal APK from:
+
+**Releases → Assets**
+
+File format:
+
+    HomeCar-vX.X.X-universal.apk
+
+For current beta builds, KingInstaller can be used as the installation method when required by the Android Auto environment.
+
+After installation:
+
+1. Open HomeCar on the phone.
+2. Tap the settings button.
+3. Enter your Home Assistant URL.
+4. Save the configuration.
+5. Connect Android Auto.
+6. Open HomeCar.
+
+Configure and test the interface while the vehicle is parked.
+
+---
+
+## Building HomeCar
+
+Requirements:
+
+- Android Studio
+- Android SDK 36
+- Java / Android Studio JBR
+- Gradle
+- Android NDK
+- CMake
+
+Clone:
+
+    git clone https://github.com/RenanEspinar/HomeCar.git
+    cd HomeCar
+
+Build the Android Auto debug bundle:
+
+    ./gradlew bundleAutoDebug
+
+HomeCar currently uses a dynamic Web module, so a universal APK can be generated from the AAB using Google's bundletool.
+
+Example:
+
+    java -jar bundletool.jar build-apks \
+      --bundle=homecar.aab \
+      --output=HomeCar.apks \
+      --mode=universal
+
+The resulting:
+
+    universal.apk
+
+contains the Web module required by HomeCar.
+
+---
+
+## Architecture
+
+HomeCar keeps the Android Auto projection infrastructure while replacing the user-facing experience with a dedicated Home Assistant browser.
+
+Simplified architecture:
+
+    Android Auto
+         |
+         v
+    HomeCar CarService
+         |
+         v
+    HomeCar Activity
+         |
+         v
+    WebView
+         |
+         v
+    Home Assistant
+
+The media browser and mirroring launcher entries are disabled in the HomeCar Android Auto build.
+
+---
+
+## Server configuration
+
+HomeCar does not contain a personal Home Assistant address.
+
+The default placeholder is:
+
+    https://homeassistant.example/
+
+Each user configures their own server through the application.
+
+The selected address is stored locally using application preferences.
+
+---
+
+## Current status
+
+### v0.1 Beta
+
+Working:
+
+- Full-screen Home Assistant WebView
+- Android Auto DHU
+- Configurable Home Assistant URL
+- Persistent configuration
+- Single Android Auto launcher entry
+- Custom HomeCar branding
+- Phone interface
+- Universal APK generation
+
+Still under testing:
+
+- Physical vehicle compatibility
+- Android Auto version compatibility
+- Installation methods across Android versions
+
+---
+
+## Roadmap
+
+Planned improvements include:
+
+- First-run configuration screen
+- Connection test
+- Better error handling
+- Reload button
+- Connection status
+- Optional kiosk mode
+- Configurable WebView behavior
+- Multiple Home Assistant profiles
+- Improved Android Auto compatibility
+- Automated GitHub release builds
+
+---
+
+## Project
+
+HomeCar is developed as an independent open-source project.
+
+Developer:
+
+**Renan Espinar**
+
+Repository:
+
+https://github.com/RenanEspinar/HomeCar
+
+Issues and contributions are welcome.
+
+---
+
+## Technical foundation
+
+HomeCar is derived from the open-source Fermata Media Player project created by Andrey Pavlenko.
+
+Fermata provides part of the Android and Android Auto infrastructure on which HomeCar was initially developed.
+
+Original project:
+
+https://github.com/AndreyPavlenko/Fermata
+
+HomeCar substantially changes the intended user experience and focuses specifically on Home Assistant dashboard access.
+
+---
+
+## License
+
+HomeCar is distributed under the **GNU General Public License v3.0**, consistent with the license of the upstream Fermata project.
+
+See:
+
+    LICENSE
+
+for the complete license text.
+
+---
+
+## Disclaimer
+
+HomeCar is an independent community project.
+
+It is not affiliated with or endorsed by:
+
+- Google
+- Android Auto
+- Home Assistant
+- Nabu Casa
+- Fermata
+
+Android Auto interfaces should only be configured or operated when it is safe and legal to do so.
+
+---
+
+**HomeCar — Your Home Assistant dashboard, in your car.**

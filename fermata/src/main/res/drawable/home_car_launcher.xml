@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Dark circular field -->
+    <path
+        android:fillColor="#0B1622"
+        android:pathData="M54,4A50,50 0,1 1,53.9 4Z" />
+
+    <!-- Home / HA-inspired roof -->
+    <path
+        android:fillColor="#18A9E6"
+        android:pathData="M19,46 L54,17 L89,46 L84,52 L54,28 L24,52 Z" />
+
+    <!-- Connected-home nodes -->
+    <path
+        android:fillColor="#18A9E6"
+        android:pathData="M50,31 h8 v8 h-8 z M34,43 h7 v7 h-7 z M67,43 h7 v7 h-7 z" />
+
+    <path
+        android:strokeColor="#18A9E6"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,35 L37.5,46.5 M54,35 L70.5,46.5 M54,35 L54,58" />
+
+    <!-- Car roof -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M31,65 L38,54 Q40,51 44,51 H65 Q69,51 71,54 L78,65 Z" />
+
+    <!-- Car body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M25,65 Q22,65 22,69 V80 Q22,84 26,84 H82 Q86,84 86,80 V69 Q86,65 82,65 Z" />
+
+    <!-- Windows -->
+    <path
+        android:fillColor="#0B1622"
+        android:pathData="M41,56 H52 V64 H35 Z M56,56 H66 L73,64 H56 Z" />
+
+    <!-- Wheels -->
+    <path
+        android:fillColor="#18A9E6"
+        android:pathData="M29,82 A7,7 0,1 0,43 82 A7,7 0,1 0,29 82" />
+    <path
+        android:fillColor="#18A9E6"
+        android:pathData="M65,82 A7,7 0,1 0,79 82 A7,7 0,1 0,65 82" />
+</vector>

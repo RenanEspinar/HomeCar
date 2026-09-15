@@ -30,4 +30,14 @@
     <string name="sponsorblock_cat_music_offtopic">Non-music sections</string>
     <string name="sponsorblock_cat_filler">Filler</string>
     <string name="sponsorblock_cat_filler_sub">Aggressive category; disabled by default.</string>
+
+    <!-- HOME CAR -->
+    <string name="home_car_server_settings">HomeCar server settings</string>
+    <string name="home_car_server_title">Home Assistant server</string>
+    <string name="home_car_server_message">Enter the address HomeCar should open. You can use a domain or a local IP address.</string>
+    <string name="home_car_server_save">Save</string>
+    <string name="home_car_server_reset">Reset</string>
+    <string name="home_car_server_required">Enter a server address</string>
+    <string name="home_car_server_saved">Server saved</string>
+    <string name="home_car_server_reset_done">Default server restored</string>
 </resources>

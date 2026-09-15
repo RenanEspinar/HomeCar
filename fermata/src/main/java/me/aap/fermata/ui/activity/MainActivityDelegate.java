@@ -259,6 +259,13 @@ public class MainActivityDelegate extends ActivityDelegate
 						". Result: " + Arrays.toString(result));
 			}
 
+			// HOME CAR: en Android Auto siempre abrimos exclusivamente el navegador.
+			// Ignoramos el fragmento anterior guardado (Carpetas, Favoritos, etc.).
+			if (AUTO) {
+				showHomeCarBrowser();
+				return;
+			}
+
 			if (fragmentId != ID_NULL) {
 				setActiveNavItemId(navId);
 				showFragment(fragmentId);
@@ -279,6 +286,12 @@ public class MainActivityDelegate extends ActivityDelegate
 	@Override
 	protected void onActivityNewIntent(Intent intent) {
 		super.onActivityNewIntent(intent);
+
+		if (AUTO) {
+			showHomeCarBrowser();
+			return;
+		}
+
 		handleIntent(intent);
 	}
 
@@ -328,6 +341,11 @@ public class MainActivityDelegate extends ActivityDelegate
 	}
 
 	private void defaultIntent() {
+		if (AUTO) {
+			showHomeCarBrowser();
+			return;
+		}
+
 		if (getActiveFragment() != null) {
 			checkUpdates();
 			return;
@@ -355,6 +373,104 @@ public class MainActivityDelegate extends ActivityDelegate
 		if (!f.isDone() || f.isFailed() || !Boolean.TRUE.equals(f.peek())) {
 			showFragment(R.id.folders_fragment);
 			setContentLoading(f);
+		}
+	}
+
+	/**
+	 * HOME CAR
+	 * Mantiene toda la infraestructura de Fermata/Android Auto, pero la interfaz
+	 * del coche queda reducida al Web Browser. No se muestran Carpetas, Favoritos,
+	 * Playlists, barra de navegación, barra superior ni botón flotante.
+	 */
+	private void showHomeCarBrowser() {
+		if (!AUTO) return;
+
+		// When HomeCar is opened directly on the phone, use the same
+		// edge-to-edge/fullscreen presentation as the in-car WebView.
+		if (!getAppActivity().isCarActivity()) {
+			setFullScreen(true);
+		}
+
+		hideHomeCarChrome();
+
+		if (getActiveFragmentId() == R.id.web_browser_fragment) return;
+
+		ActivityFragment browser = showFragment(R.id.web_browser_fragment);
+		if (browser != null) {
+			hideHomeCarChrome();
+			return;
+		}
+
+		// El navegador es un dynamic feature. Si todavía no está cargado,
+		// pedimos a Fermata que lo cargue y reintentamos al terminar.
+		AddonManager.get()
+				.getOrInstallAddon("me.aap.fermata.addon.web.WebBrowserAddon")
+				.onSuccess(addon -> post(() -> {
+					if (addon instanceof FermataFragmentAddon fragmentAddon) {
+						showFragment(fragmentAddon.getFragmentId());
+					}
+					hideHomeCarChrome();
+				}));
+	}
+
+	private void hideHomeCarChrome() {
+		barsHidden = true;
+
+		// HOME CAR: eliminate Fermata chrome both visually and geometrically.
+		// GONE alone is not enough here because the ConstraintLayout chain can
+		// preserve space while Android Auto is relaying out the CarActivity.
+		if (toolBar != null) {
+			toolBar.setVisibility(GONE);
+			var p = toolBar.getLayoutParams();
+			if (p != null) {
+				p.height = 0;
+				toolBar.setLayoutParams(p);
+			}
+		}
+
+		if (navBar != null) {
+			navBar.removeAllViews();
+			navBar.setVisibility(GONE);
+			var p = navBar.getLayoutParams();
+			if (p != null) {
+				p.width = 0;
+				p.height = 0;
+				navBar.setLayoutParams(p);
+			}
+		}
+
+		if (controlPanel != null) {
+			controlPanel.setVisibility(GONE);
+			var p = controlPanel.getLayoutParams();
+			if (p != null) {
+				p.width = 0;
+				p.height = 0;
+				controlPanel.setLayoutParams(p);
+			}
+		}
+
+		if (floatingButton != null) {
+			floatingButton.setVisibility(GONE);
+		}
+
+		// Expand the WebView host over the complete Home Car content area,
+		// bypassing the old toolbar/nav/control-panel constraint chain.
+		if (body != null && body.getLayoutParams() instanceof ConstraintLayout.LayoutParams lp) {
+			lp.width = 0;
+			lp.height = 0;
+
+			lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+			lp.startToEnd = ConstraintLayout.LayoutParams.UNSET;
+			lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+			lp.endToStart = ConstraintLayout.LayoutParams.UNSET;
+
+			lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID;
+			lp.topToBottom = ConstraintLayout.LayoutParams.UNSET;
+			lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+			lp.bottomToTop = ConstraintLayout.LayoutParams.UNSET;
+
+			body.setLayoutParams(lp);
+			body.requestLayout();
 		}
 	}
 
@@ -393,6 +509,8 @@ public class MainActivityDelegate extends ActivityDelegate
 			if (addon instanceof FermataActivityAddon)
 				((FermataActivityAddon) addon).onActivityResume(this);
 		}
+
+		if (AUTO) showHomeCarBrowser();
 	}
 
 	@Override
@@ -691,6 +809,11 @@ public class MainActivityDelegate extends ActivityDelegate
 	}
 
 	public void backToNavFragment() {
+		if (AUTO) {
+			showHomeCarBrowser();
+			return;
+		}
+
 		int id = getActiveNavItemId();
 		showFragment((id == ID_NULL) ? R.id.folders_fragment : id);
 	}
@@ -705,7 +828,14 @@ public class MainActivityDelegate extends ActivityDelegate
 	public ActivityFragment showFragment(int id, Object input) {
 		BodyLayout b = getBody();
 		if (b.isVideoMode()) b.setMode(BodyLayout.Mode.BOTH);
-		return super.showFragment(id, input);
+
+		ActivityFragment fragment = super.showFragment(id, input);
+
+		if (AUTO && id == R.id.web_browser_fragment) {
+			hideHomeCarChrome();
+		}
+
+		return fragment;
 	}
 
 	protected ActivityFragment createFragment(int id) {
@@ -997,6 +1127,12 @@ public class MainActivityDelegate extends ActivityDelegate
 		floatingButton = a.findViewById(R.id.floating_button);
 		floatingButton.setScale(getPrefs().getTextIconSizePref(this));
 		controlPanel.bind(getMediaServiceBinder());
+
+		// HOME CAR: ocultamos el chrome de Fermata desde el primer frame para
+		// evitar que aparezca brevemente la interfaz de Carpetas/Música.
+		if (AUTO && a.isCarActivity()) {
+			hideHomeCarChrome();
+		}
 
 		if (VERSION.SDK_INT >= VERSION_CODES.VANILLA_ICE_CREAM && !a.isCarActivity()) {
 			ViewCompat.setOnApplyWindowInsetsListener(toolBar, (v, insets) -> {

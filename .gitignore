@@ -16,3 +16,32 @@ res/*.jks
 # Custom builds
 fermata/src/custom/
 build-custom.gradle
+.gradle/
+.idea/
+**/build/
+*.apk
+*.aab
+*.apks
+HomeCarUniversal/
+local.properties
+
+# HomeCar local/build files
+.gradle/
+.idea/
+**/build/
+*.apk
+*.aab
+*.apks
+HomeCarUniversal/
+local.properties
+
+.gradle/
+.idea/
+**/build/
+*.apk
+*.aab
+*.apks
+bundletool.jar
+HomeCarUniversal/
+local.properties
+gradle/gradle-daemon-jvm.properties

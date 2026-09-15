@@ -6,7 +6,7 @@ android {
         applicationId project.getProperties().getOrDefault('APP_ID', 'me.aap.fermata')
         versionCode VERSION_CODE
         versionName VERSION_NAME
-        base.archivesName = "fermata-$versionName"
+        base.archivesName = "homecar-$versionName"
 
         ndk {
             //noinspection ChromeOsAbiSupport
@@ -29,12 +29,15 @@ android {
         release {
             debuggable false
             minifyEnabled true
-            resValue "string", "app_name_auto", "@string/app_name_auto_release"
-            resValue "string", "app_name_mobile", "@string/app_name_mobile_release"
-            resValue "string", "media_service_name_auto", "@string/media_service_name_auto_release"
-            resValue "string", "media_service_name_mobile", "@string/media_service_name_mobile_release"
-            resValue "string", "mirror_service_name", "@string/mirror_service_name_release"
-            resValue "string", "mirror_fs_service_name", "@string/mirror_fs_service_name_release"
+
+            // HOME CAR branding
+            resValue "string", "app_name_auto", "HomeCar"
+            resValue "string", "app_name_mobile", "HomeCar"
+            resValue "string", "media_service_name_auto", "HomeCar"
+            resValue "string", "media_service_name_mobile", "HomeCar"
+            resValue "string", "mirror_service_name", "HomeCar"
+            resValue "string", "mirror_fs_service_name", "HomeCar"
+
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     '../proguard-rules.pro', '../depends/utils/proguard-rules.pro'
             signingConfig = signingConfigs.release
@@ -44,12 +47,15 @@ android {
         debug {
             debuggable true
             applicationIdSuffix '.debug'
-            resValue "string", "app_name_auto", "@string/app_name_auto_debug"
-            resValue "string", "app_name_mobile", "@string/app_name_mobile_debug"
-            resValue "string", "media_service_name_auto", "@string/media_service_name_auto_debug"
-            resValue "string", "media_service_name_mobile", "@string/media_service_name_mobile_debug"
-            resValue "string", "mirror_service_name", "@string/mirror_service_name_debug"
-            resValue "string", "mirror_fs_service_name", "@string/mirror_fs_service_name_debug"
+
+            // HOME CAR branding even in debug builds.
+            resValue "string", "app_name_auto", "HomeCar"
+            resValue "string", "app_name_mobile", "HomeCar"
+            resValue "string", "media_service_name_auto", "HomeCar"
+            resValue "string", "media_service_name_mobile", "HomeCar"
+            resValue "string", "mirror_service_name", "HomeCar"
+            resValue "string", "mirror_fs_service_name", "HomeCar"
+
             signingConfig = signingConfigs.release
             buildConfigField "boolean", 'D', 'true'
         }
@@ -60,10 +66,9 @@ android {
     productFlavors {
         mobile {
             dimension "version"
-            resValue "string", "app_name", project.getProperties()
-                    .getOrDefault('APP_NAME', "@string/app_name_mobile")
-            resValue "string", "media_service_name", "@string/media_service_name_mobile"
-            resValue "drawable", "media_service_icon", "@drawable/launcher"
+            resValue "string", "app_name", "HomeCar"
+            resValue "string", "media_service_name", "HomeCar"
+            resValue "drawable", "media_service_icon", "@drawable/home_car_launcher"
             buildConfigField "boolean", 'AUTO', 'false'
             buildConfigField "boolean", 'ENABLE_GS', "${gradle.ext.enableGoogleServices}"
         }
@@ -71,10 +76,12 @@ android {
         auto {
             dimension "version"
             applicationIdSuffix '.auto' + project.getProperties().getOrDefault('APP_ID_SFX', '')
-            resValue "string", "app_name", project.getProperties()
-                    .getOrDefault('APP_NAME', "@string/app_name_auto")
-            resValue "string", "media_service_name", "@string/media_service_name_auto"
-            resValue "drawable", "media_service_icon", "@drawable/media_service"
+
+            // HOME CAR: force the actual Android Auto launcher/service names.
+            resValue "string", "app_name", "HomeCar"
+            resValue "string", "media_service_name", "HomeCar"
+            resValue "drawable", "media_service_icon", "@drawable/home_car_launcher"
+
             buildConfigField "boolean", 'AUTO', 'true'
             buildConfigField "boolean", 'ENABLE_GS', "${gradle.ext.enableGoogleServices}"
 
@@ -84,14 +91,24 @@ android {
             }
         }
     }
+
     packagingOptions {
         resources {
-            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/license.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt', 'META-INF/notice.txt', 'META-INF/ASL2.0', 'META-INF/*.version']
+            excludes += [
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/license.txt',
+                    'META-INF/NOTICE',
+                    'META-INF/NOTICE.txt',
+                    'META-INF/notice.txt',
+                    'META-INF/ASL2.0',
+                    'META-INF/*.version'
+            ]
         }
     }
 
     dynamicFeatures.addAll(gradle.ext.modules)
-
     namespace = 'me.aap.fermata'
 }
 

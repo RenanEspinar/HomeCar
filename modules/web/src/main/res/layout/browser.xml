@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -12,5 +13,25 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone" />
+
+    <!--
+        HOME CAR server configuration.
+        Small, semi-transparent button so it remains available without
+        taking over the Home Assistant dashboard.
+    -->
+    <ImageButton
+        android:id="@+id/homeCarSettingsButton"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        android:alpha="0.72"
+        android:background="@drawable/home_car_settings_button"
+        android:contentDescription="@string/home_car_server_settings"
+        android:elevation="12dp"
+        android:padding="11dp"
+        android:src="@drawable/home_car_settings"
+        android:tint="#FFFFFF" />
 
 </FrameLayout>
