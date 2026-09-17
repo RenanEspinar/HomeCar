@@ -1,0 +1,855 @@
+- type: custom:button-card
+  entity: sun.sun
+  variables:
+    weather_entity: weather.forecast_home
+    rain_probability_entity: ""
+  show_name: false
+  show_icon: false
+  show_state: false
+  triggers_update: all
+  custom_fields:
+    solar: |
+      [[[
+        const bad = new Set(["unknown", "unavailable"]);
+
+        const num = value => {
+          if (value === null || value === undefined || value === "") return null;
+          const n = Number(value);
+          return Number.isFinite(n) ? n : null;
+        };
+
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const fmt = (value, digits = 0) => value === null ? "--" : value.toFixed(digits);
+        const titleCase = value => String(value || "")
+          .toLowerCase()
+          .replace(/(^|\s)\S/g, s => s.toUpperCase());
+
+        const rawElevation = num(entity?.attributes?.elevation);
+        const rawAzimuth = num(entity?.attributes?.azimuth);
+
+        const sunOnline =
+          !bad.has(String(entity?.state || "").toLowerCase()) &&
+          rawElevation !== null &&
+          rawAzimuth !== null;
+
+        const elevation = sunOnline ? rawElevation : 0;
+        const azimuth = sunOnline ? ((rawAzimuth % 360) + 360) % 360 : 0;
+        const elevationText = sunOnline ? elevation.toFixed(1) : "--";
+        const azimuthText = sunOnline ? azimuth.toFixed(1) : "--";
+        const isDay = sunOnline && (entity?.state === "above_horizon" || elevation >= 0);
+
+        const preferredWeatherId = String(
+          variables?.weather_entity || "weather.forecast_home"
+        ).trim();
+
+        const preferredWeather = states?.[preferredWeatherId];
+        const preferredWeatherValid =
+          preferredWeather &&
+          !bad.has(String(preferredWeather.state || "").toLowerCase());
+
+        const weatherEntity =
+          (preferredWeatherValid ? preferredWeather : null) ||
+          Object.values(states || {}).find(
+            s => s?.entity_id?.startsWith("weather.") &&
+              !bad.has(String(s.state || "").toLowerCase())
+          ) ||
+          preferredWeather ||
+          Object.values(states || {}).find(s => s?.entity_id?.startsWith("weather."));
+
+        const weatherState = String(weatherEntity?.state || "unknown").toLowerCase();
+        const weatherOnline = !!weatherEntity && !bad.has(weatherState);
+        const wa = weatherEntity?.attributes || {};
+
+        const temperature = num(wa.temperature);
+        const humidity = num(wa.humidity);
+        const windSpeed = num(wa.wind_speed);
+        const cloudCover = num(wa.cloud_coverage);
+        const pressure = num(wa.pressure);
+        const apparentTemperature = num(wa.apparent_temperature);
+        const windBearing = wa.wind_bearing ?? null;
+
+        const temperatureUnit =
+          wa.temperature_unit ||
+          hass?.config?.unit_system?.temperature ||
+          "°C";
+
+        const windUnit = wa.wind_speed_unit || "km/h";
+        const pressureUnit = wa.pressure_unit || "hPa";
+
+        const rainId = String(variables?.rain_probability_entity || "").trim();
+        const rainEntity = rainId ? states?.[rainId] : null;
+        const rainProbability =
+          num(rainEntity?.state) ??
+          num(wa.precipitation_probability);
+
+        const weatherMap = {
+          "clear-night": ["NOCHE DESPEJADA", "mdi:weather-night"],
+          "cloudy": ["NUBLADO", "mdi:weather-cloudy"],
+          "fog": ["NIEBLA", "mdi:weather-fog"],
+          "hail": ["GRANIZO", "mdi:weather-hail"],
+          "lightning": ["TORMENTA ELÉCTRICA", "mdi:weather-lightning"],
+          "lightning-rainy": ["TORMENTA CON LLUVIA", "mdi:weather-lightning-rainy"],
+          "partlycloudy": ["PARCIALMENTE NUBLADO", "mdi:weather-partly-cloudy"],
+          "pouring": ["LLUVIA INTENSA", "mdi:weather-pouring"],
+          "rainy": ["LLUVIA", "mdi:weather-rainy"],
+          "snowy": ["NIEVE", "mdi:weather-snowy"],
+          "snowy-rainy": ["AGUANIEVE", "mdi:weather-snowy-rainy"],
+          "sunny": ["DESPEJADO", "mdi:weather-sunny"],
+          "windy": ["VENTOSO", "mdi:weather-windy"],
+          "windy-variant": ["VENTOSO", "mdi:weather-windy-variant"],
+          "exceptional": ["CONDICIÓN EXTREMA", "mdi:weather-tornado"],
+          "unknown": ["SIN DATOS", "mdi:weather-cloudy-alert"],
+          "unavailable": ["SIN CONEXIÓN", "mdi:weather-cloudy-alert"]
+        };
+
+        const [weatherLabel, weatherIcon] = weatherMap[weatherState] || [
+          String(weatherState).replaceAll("-", " ").toUpperCase(),
+          "mdi:weather-cloudy"
+        ];
+
+        const rainStates = new Set(["rainy", "pouring", "lightning-rainy", "snowy-rainy", "hail"]);
+        const cloudyStates = new Set(["cloudy", "partlycloudy", "rainy", "pouring", "lightning-rainy", "snowy-rainy", "hail", "fog", "snowy"]);
+        const stormStates = new Set(["lightning", "lightning-rainy"]);
+        const snowStates = new Set(["snowy", "snowy-rainy"]);
+
+        const isRain = rainStates.has(weatherState);
+        const isCloudy = cloudyStates.has(weatherState);
+        const isStorm = stormStates.has(weatherState);
+        const isSnow = snowStates.has(weatherState);
+        const isFog = weatherState === "fog";
+
+        const compass = value => {
+          if (value === null || value === undefined || value === "--") return "--";
+          if (typeof value === "string" && isNaN(Number(value))) return value.toUpperCase();
+
+          const degrees = Number(value);
+          if (!Number.isFinite(degrees)) return "--";
+
+          const normalized = ((degrees % 360) + 360) % 360;
+          const dirs = [
+            "N","NNE","NE","ENE","E","ESE","SE","SSE",
+            "S","SSW","SW","WSW","W","WNW","NW","NNW"
+          ];
+
+          return dirs[Math.round(normalized / 22.5) % 16];
+        };
+
+        const windDirection = compass(windBearing);
+        const solarDirection = sunOnline ? compass(azimuth) : "--";
+
+        let auxLabel = "Data";
+        let auxValue = "--";
+        let auxSub = "Current";
+        let auxIcon = "mdi:gauge";
+
+        if (rainProbability !== null) {
+          auxLabel = "Rain chance";
+          auxValue = `${rainProbability.toFixed(0)}%`;
+          auxSub = rainId ? "Sensor" : "Current";
+          auxIcon = "mdi:weather-rainy";
+        } else if (cloudCover !== null) {
+          auxLabel = "Cloud cover";
+          auxValue = `${cloudCover.toFixed(0)}%`;
+          auxSub = "Current";
+          auxIcon = "mdi:weather-cloudy";
+        } else if (pressure !== null) {
+          auxLabel = "Pressure";
+          auxValue = `${pressure.toFixed(0)} ${pressureUnit}`;
+          auxSub = "Current";
+          auxIcon = "mdi:gauge";
+        } else if (apparentTemperature !== null) {
+          auxLabel = "Feels like";
+          auxValue = `${apparentTemperature.toFixed(1)}${temperatureUnit}`;
+          auxSub = "Apparent";
+          auxIcon = "mdi:thermometer";
+        }
+
+        const azimuthRad = azimuth * Math.PI / 180;
+        const sunX = clamp(50 - 43 * Math.sin(azimuthRad), 7, 93);
+        const visibleElevation = clamp(elevation, 0, 90);
+        const sunY = 81 - (visibleElevation / 90) * 61;
+        const sunCx = sunX * 10;
+        const sunCy = sunY * 3;
+        const sunVisible = sunOnline && elevation >= -0.5;
+
+        let solarState;
+        let solarSubstate;
+        let sunColor;
+        let glowColor;
+        let skyTop;
+        let skyBottom;
+        let horizonColor;
+        let mountainFar;
+        let mountainNear;
+
+        if (!sunOnline) {
+          solarState = "SOLAR DATA OFFLINE";
+          solarSubstate = "SUN.SUN NO DISPONIBLE";
+          sunColor = "#b7c3cc";
+          glowColor = "rgba(160,180,195,.16)";
+          skyTop = "#22303d";
+          skyBottom = "#0a1017";
+          horizonColor = "rgba(180,200,215,.20)";
+          mountainFar = "rgba(15,24,31,.82)";
+          mountainNear = "rgba(6,10,14,.96)";
+        } else if (elevation >= 5) {
+          solarState = "DAYLIGHT";
+          solarSubstate = "ILUMINACIÓN NATURAL";
+          sunColor = "#fff2b8";
+          glowColor = "rgba(255,220,128,.72)";
+          skyTop = isCloudy ? "#58748b" : "#4f9fd8";
+          skyBottom = isCloudy ? "#a6b6c1" : "#c9e6f4";
+          horizonColor = "rgba(225,239,245,.52)";
+          mountainFar = "rgba(31,54,67,.42)";
+          mountainNear = "rgba(18,34,42,.68)";
+        } else if (elevation >= 0) {
+          solarState = "HORIZON TRANSITION";
+          solarSubstate = "AMANECER / OCASO";
+          sunColor = "#ffc46f";
+          glowColor = "rgba(255,143,63,.78)";
+          skyTop = isRain ? "#53606b" : "#755b69";
+          skyBottom = isRain ? "#a29289" : "#d59368";
+          horizonColor = "rgba(255,203,150,.48)";
+          mountainFar = "rgba(51,49,53,.48)";
+          mountainNear = "rgba(24,24,28,.72)";
+        } else if (elevation >= -6) {
+          solarState = "CIVIL TWILIGHT";
+          solarSubstate = "CREPÚSCULO CIVIL";
+          sunColor = "#e3a46d";
+          glowColor = "rgba(211,124,66,.32)";
+          skyTop = isRain ? "#344250" : "#49384c";
+          skyBottom = isRain ? "#171b23" : "#15131a";
+          horizonColor = "rgba(215,173,145,.32)";
+          mountainFar = "rgba(23,29,36,.72)";
+          mountainNear = "rgba(9,12,16,.92)";
+        } else if (elevation >= -12) {
+          solarState = "NAUTICAL TWILIGHT";
+          solarSubstate = "CREPÚSCULO NÁUTICO";
+          sunColor = "#9d856c";
+          glowColor = "rgba(125,105,90,.20)";
+          skyTop = isRain ? "#1a2532" : "#1f2130";
+          skyBottom = "#07080d";
+          horizonColor = "rgba(155,169,190,.22)";
+          mountainFar = "rgba(10,14,20,.88)";
+          mountainNear = "rgba(4,6,9,.98)";
+        } else {
+          solarState = "NIGHT";
+          solarSubstate = "NOCHE ASTRONÓMICA";
+          sunColor = "#8f969c";
+          glowColor = "rgba(120,110,100,.10)";
+          skyTop = isRain ? "#111c29" : "#0c1425";
+          skyBottom = "#02040a";
+          horizonColor = "rgba(128,151,183,.18)";
+          mountainFar = "rgba(7,12,20,.92)";
+          mountainNear = "rgba(2,4,8,1)";
+        }
+
+        const timeZone =
+          hass?.config?.time_zone ||
+          Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        const formatTime = value => {
+          if (!value) return "--:--";
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "--:--";
+
+          return date.toLocaleTimeString("es-BO", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone
+          });
+        };
+
+        const formatUntil = value => {
+          if (!value) return "";
+          const date = new Date(value);
+          const diff = date.getTime() - Date.now();
+          if (!Number.isFinite(diff) || diff <= 0) return "";
+
+          const totalMinutes = Math.floor(diff / 60000);
+          const hours = Math.floor(totalMinutes / 60);
+          const minutes = totalMinutes % 60;
+
+          return hours > 0 ? `in ${hours}h ${minutes}m` : `in ${minutes}m`;
+        };
+
+        const sunriseRaw = entity?.attributes?.next_rising;
+        const sunsetRaw = entity?.attributes?.next_setting;
+        const sunrise = formatTime(sunriseRaw);
+        const sunset = formatTime(sunsetRaw);
+        const sunriseUntil = formatUntil(sunriseRaw);
+        const sunsetUntil = formatUntil(sunsetRaw);
+
+        const now = new Date();
+        const timeNow = now.toLocaleTimeString("es-BO", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone
+        });
+
+        const dateNow = now.toLocaleDateString("es-BO", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          timeZone
+        }).toUpperCase();
+
+        const weatherAccent =
+          isStorm ? "#b9c7ff" :
+          isRain ? "#8ecbff" :
+          isSnow ? "#d9f0ff" :
+          isDay ? "#ffd98a" :
+          "#9dbbe8";
+
+        const cloudLayer = isCloudy
+          ? `<div class="cloud c1"></div><div class="cloud c2"></div>`
+          : "";
+
+        const rainLayer = isRain ? `<div class="rain"></div>` : "";
+        const fogLayer = isFog ? `<div class="fog"></div>` : "";
+
+        const weatherStatus = weatherOnline
+          ? "Weather online · Solar tracking active"
+          : "Weather data offline";
+
+        const solarStatus = !sunOnline
+          ? "Solar data unavailable"
+          : elevation >= 0
+            ? `Sun ${elevation.toFixed(1)}° above horizon`
+            : `Sun ${Math.abs(elevation).toFixed(1)}° below horizon`;
+
+        return `
+          <style>
+            .orion {
+              width:100%;
+              color:#f5f8fb;
+              font-family:Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+            }
+
+            .header {
+              display:flex;
+              justify-content:space-between;
+              align-items:flex-start;
+              gap:14px;
+              margin-bottom:12px;
+            }
+
+            .title {
+              font-size:16px;
+              line-height:1.15;
+              font-weight:800;
+              letter-spacing:.5px;
+            }
+
+            .subtitle {
+              margin-top:4px;
+              color:rgba(185,211,229,.62);
+              font-size:9px;
+              line-height:1.2;
+              font-weight:500;
+              letter-spacing:.15px;
+            }
+
+            .solar-state {
+              color:${sunColor};
+              font-size:12px;
+              line-height:1.15;
+              font-weight:750;
+              text-align:right;
+            }
+
+            .solar-substate {
+              margin-top:3px;
+              color:rgba(185,211,229,.60);
+              font-size:8px;
+              line-height:1.15;
+              font-weight:500;
+              text-align:right;
+            }
+
+            .sky {
+              position:relative;
+              height:238px;
+              overflow:hidden;
+              border-radius:22px;
+              border:1px solid rgba(121,191,244,.22);
+              isolation:isolate;
+              background:
+                radial-gradient(circle at ${sunX}% ${Math.min(sunY,70)}%, ${glowColor}, transparent 14%),
+                linear-gradient(180deg,${skyTop},${skyBottom});
+            }
+
+            .sky:after {
+              content:"";
+              position:absolute;
+              inset:0;
+              z-index:7;
+              pointer-events:none;
+              background:linear-gradient(180deg,rgba(255,255,255,.03),transparent 42%,rgba(0,0,0,.16));
+            }
+
+            .cloud {
+              position:absolute;
+              z-index:2;
+              border-radius:999px;
+              filter:blur(16px);
+              opacity:${isRain ? ".70" : ".45"};
+              background:radial-gradient(circle,${isDay ? "rgba(235,242,246,.64)" : "rgba(100,120,145,.32)"},transparent 70%);
+              animation:cloudMove 25s linear infinite alternate;
+            }
+
+            .c1 { width:58%; height:42%; left:-12%; top:-7%; }
+            .c2 { width:64%; height:50%; right:-18%; top:5%; animation-duration:34s; }
+
+            @keyframes cloudMove {
+              from { transform:translateX(-3%) scale(1); }
+              to { transform:translateX(6%) scale(1.08); }
+            }
+
+            .rain {
+              position:absolute;
+              inset:0;
+              z-index:6;
+              pointer-events:none;
+              opacity:.5;
+              background:repeating-linear-gradient(104deg,transparent 0 14px,rgba(190,226,255,.38) 15px 16px,transparent 17px 29px);
+              background-size:42px 42px;
+              animation:rainMove .7s linear infinite;
+            }
+
+            @keyframes rainMove {
+              from { background-position:0 -42px; }
+              to { background-position:-14px 42px; }
+            }
+
+            .fog {
+              position:absolute;
+              left:-10%;
+              top:47%;
+              width:120%;
+              height:34%;
+              z-index:5;
+              pointer-events:none;
+              filter:blur(12px);
+              background:linear-gradient(90deg,transparent,rgba(235,242,246,.18),transparent);
+            }
+
+            .sky-svg {
+              position:absolute;
+              inset:0;
+              width:100%;
+              height:100%;
+              z-index:4;
+            }
+
+            .weather-pill,
+            .clock {
+              position:absolute;
+              z-index:10;
+              top:13px;
+              border:1px solid rgba(255,255,255,.08);
+              border-radius:14px;
+              background:rgba(5,12,18,.46);
+              backdrop-filter:blur(10px);
+            }
+
+            .weather-pill {
+              left:13px;
+              display:flex;
+              align-items:center;
+              gap:8px;
+              max-width:57%;
+              padding:9px 11px;
+            }
+
+            .weather-pill ha-icon {
+              --mdc-icon-size:28px;
+              color:${weatherAccent};
+              flex:0 0 auto;
+            }
+
+            .clock {
+              right:13px;
+              min-width:88px;
+              padding:8px 10px;
+              text-align:right;
+            }
+
+            .small-label {
+              color:rgba(212,228,238,.62);
+              font-size:8px;
+              line-height:1.1;
+              font-weight:550;
+              letter-spacing:.08px;
+            }
+
+            .pill-value {
+              margin-top:3px;
+              color:#f7fafc;
+              font-size:12px;
+              line-height:1.1;
+              font-weight:750;
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+            }
+
+            .clock-value {
+              margin-top:3px;
+              font-size:20px;
+              line-height:1;
+              font-weight:800;
+              font-variant-numeric:tabular-nums;
+            }
+
+            .metrics,
+            .solar-metrics {
+              display:grid;
+              grid-template-columns:repeat(4,minmax(0,1fr));
+              gap:8px;
+              margin-top:9px;
+            }
+
+            .metric {
+              min-width:0;
+              min-height:86px;
+              box-sizing:border-box;
+              padding:10px 9px 9px;
+              border:1px solid rgba(126,185,225,.15);
+              border-radius:15px;
+              overflow:hidden;
+              background:linear-gradient(145deg,rgba(15,27,37,.92),rgba(6,12,18,.98));
+              box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+            }
+
+            .metric-head {
+              display:flex;
+              align-items:center;
+              gap:5px;
+              min-width:0;
+              margin-bottom:7px;
+            }
+
+            .metric-head ha-icon {
+              --mdc-icon-size:17px;
+              color:rgba(145,207,248,.95);
+              flex:0 0 auto;
+            }
+
+            .metric.weather .metric-head ha-icon {
+              color:${weatherAccent};
+            }
+
+            .metric.solar .metric-head ha-icon {
+              color:${sunColor};
+            }
+
+            .metric-label {
+              min-width:0;
+              color:rgba(190,216,233,.76);
+              font-size:8px;
+              line-height:1.1;
+              font-weight:650;
+              letter-spacing:0;
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+            }
+
+            .metric-value {
+              color:#f8fbfd;
+              font-size:18px;
+              line-height:1.05;
+              font-weight:800;
+              letter-spacing:-.25px;
+              white-space:nowrap;
+              font-variant-numeric:tabular-nums;
+            }
+
+            .metric.weather .metric-value {
+              font-size:19px;
+            }
+
+            .unit {
+              margin-left:2px;
+              color:rgba(218,232,241,.78);
+              font-size:9px;
+              font-weight:600;
+              letter-spacing:0;
+            }
+
+            .metric-sub {
+              margin-top:5px;
+              color:rgba(164,198,220,.68);
+              font-size:8px;
+              line-height:1.12;
+              font-weight:500;
+              letter-spacing:0;
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+            }
+
+            .status {
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              gap:8px;
+              flex-wrap:wrap;
+              margin-top:10px;
+              padding:9px 11px;
+              border:1px solid ${weatherOnline ? "rgba(97,217,165,.20)" : "rgba(255,107,107,.20)"};
+              border-radius:14px;
+              background:${weatherOnline ? "rgba(20,69,57,.16)" : "rgba(82,31,31,.16)"};
+            }
+
+            .status-left {
+              display:flex;
+              align-items:center;
+              gap:7px;
+            }
+
+            .dot {
+              width:7px;
+              height:7px;
+              border-radius:50%;
+              background:${weatherOnline ? "#61d9a5" : "#ff6b6b"};
+              box-shadow:0 0 10px ${weatherOnline ? "rgba(97,217,165,.42)" : "rgba(255,107,107,.30)"};
+            }
+
+            .status-text,
+            .solar-status {
+              font-size:8px;
+              line-height:1.2;
+              font-weight:650;
+              letter-spacing:0;
+            }
+
+            .status-text {
+              color:${weatherOnline ? "#8ee7be" : "#ff9b9b"};
+            }
+
+            .solar-status {
+              color:${sunOnline ? (elevation >= 0 ? "#bddcae" : "#aac2d5") : "#ff9b9b"};
+              text-align:right;
+            }
+
+            .source {
+              width:100%;
+              color:rgba(165,198,220,.35);
+              font-size:7px;
+              text-align:right;
+            }
+
+            @media (max-width:430px) {
+              .metrics,
+              .solar-metrics { gap:6px; }
+
+              .metric {
+                min-height:82px;
+                padding:9px 7px 8px;
+                border-radius:13px;
+              }
+
+              .metric-head { gap:4px; margin-bottom:6px; }
+              .metric-head ha-icon { --mdc-icon-size:15px; }
+              .metric-label { font-size:7.5px; }
+              .metric-value { font-size:16px; }
+              .metric.weather .metric-value { font-size:17px; }
+              .unit { font-size:8px; }
+              .metric-sub { font-size:7.5px; }
+            }
+          </style>
+
+          <div class="orion">
+            <div class="header">
+              <div>
+                <div class="title">SOLAR POSITION MONITOR</div>
+                <div class="subtitle">ORION ASTRONOMICAL + WEATHER TELEMETRY</div>
+              </div>
+
+              <div>
+                <div class="solar-state">${solarState}</div>
+                <div class="solar-substate">${solarSubstate}</div>
+              </div>
+            </div>
+
+            <div class="sky">
+              ${cloudLayer}
+              ${fogLayer}
+              ${rainLayer}
+
+              <svg class="sky-svg" viewBox="0 0 1000 300" preserveAspectRatio="none">
+                ${!isDay ? `
+                  <g opacity="${isCloudy ? ".20" : ".68"}">
+                    <circle cx="110" cy="58" r="2" fill="#fff"/>
+                    <circle cx="230" cy="95" r="1.2" fill="#fff"/>
+                    <circle cx="330" cy="48" r="1.5" fill="#fff"/>
+                    <circle cx="690" cy="64" r="1.4" fill="#fff"/>
+                    <circle cx="825" cy="102" r="1.2" fill="#fff"/>
+                    <circle cx="900" cy="54" r="1.7" fill="#fff"/>
+                  </g>
+                ` : ""}
+
+                <path d="M0 242 L90 205 L165 226 L245 186 L335 221 L430 177 L520 216 L610 190 L705 224 L790 184 L880 219 L1000 194 L1000 300 L0 300 Z" fill="${mountainFar}"/>
+                <path d="M0 250 L110 223 L195 245 L280 214 L375 246 L470 219 L565 247 L660 217 L760 246 L850 220 L940 244 L1000 227 L1000 300 L0 300 Z" fill="${mountainNear}"/>
+
+                <path d="M 70 245 Q 500 28 930 245" fill="none" stroke="rgba(255,238,195,.32)" stroke-width="2" stroke-dasharray="8 12"/>
+                <line x1="50" y1="245" x2="950" y2="245" stroke="${horizonColor}" stroke-width="1.4"/>
+                <line x1="500" y1="92" x2="500" y2="245" stroke="rgba(235,245,250,.28)" stroke-width="1" stroke-dasharray="6 8"/>
+
+                <circle cx="70" cy="245" r="4" fill="rgba(245,248,250,.82)"/>
+                <circle cx="500" cy="245" r="4" fill="rgba(245,248,250,.82)"/>
+                <circle cx="930" cy="245" r="4" fill="rgba(245,248,250,.82)"/>
+
+                <text x="64" y="275" fill="rgba(235,240,243,.66)" font-size="17">EAST</text>
+                <text x="462" y="275" fill="rgba(235,240,243,.48)" font-size="15">MERIDIAN</text>
+                <text x="874" y="275" fill="rgba(235,240,243,.66)" font-size="17">WEST</text>
+
+                <g opacity="${sunVisible ? "1" : "0"}">
+                  <circle cx="${sunCx}" cy="${sunCy}" r="35" fill="${glowColor}" opacity=".18">
+                    <animate attributeName="r" values="30;40;30" dur="4s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="${sunCx}" cy="${sunCy}" r="20" fill="${glowColor}" opacity=".32"/>
+                  <circle cx="${sunCx}" cy="${sunCy}" r="12" fill="${sunColor}"/>
+                  <circle cx="${sunCx}" cy="${sunCy}" r="5" fill="#fff7e6" opacity="${isDay ? ".95" : ".58"}"/>
+                  <line x1="${sunCx}" y1="${sunCy + 18}" x2="${sunCx}" y2="245" stroke="${glowColor}" stroke-width="1" stroke-dasharray="5 7" opacity=".52"/>
+                </g>
+              </svg>
+
+              <div class="weather-pill">
+                <ha-icon icon="${weatherIcon}"></ha-icon>
+                <div style="min-width:0">
+                  <div class="small-label">Current weather</div>
+                  <div class="pill-value">${titleCase(weatherLabel)}</div>
+                </div>
+              </div>
+
+              <div class="clock">
+                <div class="small-label">${dateNow}</div>
+                <div class="clock-value">${timeNow}</div>
+                <div class="small-label" style="margin-top:3px">Local time</div>
+              </div>
+            </div>
+
+            <div class="metrics">
+              <div class="metric weather">
+                <div class="metric-head">
+                  <ha-icon icon="${weatherIcon}"></ha-icon>
+                  <div class="metric-label">Weather</div>
+                </div>
+                <div class="metric-value">
+                  ${fmt(temperature,1)}<span class="unit">${temperature === null ? "" : temperatureUnit}</span>
+                </div>
+                <div class="metric-sub">${titleCase(weatherLabel)}</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:water-percent"></ha-icon>
+                  <div class="metric-label">Humidity</div>
+                </div>
+                <div class="metric-value">
+                  ${fmt(humidity,0)}<span class="unit">${humidity === null ? "" : "%"}</span>
+                </div>
+                <div class="metric-sub">Relative</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:weather-windy"></ha-icon>
+                  <div class="metric-label">Wind</div>
+                </div>
+                <div class="metric-value">
+                  ${fmt(windSpeed,1)}<span class="unit">${windSpeed === null ? "" : windUnit}</span>
+                </div>
+                <div class="metric-sub">${windDirection}</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-head">
+                  <ha-icon icon="${auxIcon}"></ha-icon>
+                  <div class="metric-label">${auxLabel}</div>
+                </div>
+                <div class="metric-value">${auxValue}</div>
+                <div class="metric-sub">${auxSub}</div>
+              </div>
+            </div>
+
+            <div class="solar-metrics">
+              <div class="metric solar">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:angle-acute"></ha-icon>
+                  <div class="metric-label">Elevation</div>
+                </div>
+                <div class="metric-value">
+                  ${elevationText}<span class="unit">${elevationText === "--" ? "" : "°"}</span>
+                </div>
+                <div class="metric-sub">Solar altitude</div>
+              </div>
+
+              <div class="metric solar">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:compass-outline"></ha-icon>
+                  <div class="metric-label">Azimuth</div>
+                </div>
+                <div class="metric-value">
+                  ${azimuthText}<span class="unit">${azimuthText === "--" ? "" : "°"}</span>
+                </div>
+                <div class="metric-sub">${solarDirection}</div>
+              </div>
+
+              <div class="metric solar">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:weather-sunset-up"></ha-icon>
+                  <div class="metric-label">Sunrise</div>
+                </div>
+                <div class="metric-value">${sunrise}</div>
+                <div class="metric-sub">${sunriseUntil || "Next rising"}</div>
+              </div>
+
+              <div class="metric solar">
+                <div class="metric-head">
+                  <ha-icon icon="mdi:weather-sunset-down"></ha-icon>
+                  <div class="metric-label">Sunset</div>
+                </div>
+                <div class="metric-value">${sunset}</div>
+                <div class="metric-sub">${sunsetUntil || "Next setting"}</div>
+              </div>
+            </div>
+
+            <div class="status">
+              <div class="status-left">
+                <span class="dot"></span>
+                <div class="status-text">${weatherStatus}</div>
+              </div>
+              <div class="solar-status">${solarStatus}</div>
+              <div class="source">Source · ${(weatherEntity?.entity_id || preferredWeatherId).toUpperCase()}</div>
+            </div>
+          </div>
+        `;
+      ]]]
+  styles:
+    card:
+      - background: |-
+          linear-gradient(
+            145deg,
+            rgba(10,20,31,0.98),
+            rgba(4,9,15,0.99)
+          )
+      - border: 1px solid rgba(105,184,255,0.18)
+      - border-radius: 24px
+      - box-shadow: >-
+          0 18px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.025)
+      - padding: 18px
+      - overflow: hidden
+    grid:
+      - grid-template-areas: '"solar"'
+      - grid-template-columns: 1fr
+      - grid-template-rows: auto
+    custom_fields:
+      solar:
+        - width: 100%
+        - text-align: left
