@@ -50,22 +50,36 @@ public class FermataWebClient extends WebViewClientCompat {
 		}
 
 		super.onPageFinished(view, url);
-		((FermataWebView) view).hideKeyboard();
+		v.hideKeyboard();
 		v.pageLoaded(url);
 		f.onSuccess(a -> a.fireBroadcastEvent(FRAGMENT_CONTENT_CHANGED));
 	}
 
 	@Override
 	public boolean shouldOverrideUrlLoading(@NonNull WebView view,
-																					@NonNull WebResourceRequest request) {
-		if (isYoutubeUri(request.getUrl())) {
+											@NonNull WebResourceRequest request) {
+		Uri target = request.getUrl();
+		String scheme = target.getScheme();
+
+		if ((scheme == null)
+				|| (!"http".equalsIgnoreCase(scheme)
+				&& !"https".equalsIgnoreCase(scheme))) {
+			Log.w("Blocked WebView navigation: " + target);
+			return true;
+		}
+
+		if (isYoutubeUri(target)) {
 			try {
 				MainActivityDelegate a =
 						MainActivityDelegate.getActivityDelegate(view.getContext()).peek();
 				if (a == null) return false;
-				if (!(a.showFragment(me.aap.fermata.R.id.youtube_fragment) instanceof YoutubeFragment f))
+
+				if (!(a.showFragment(me.aap.fermata.R.id.youtube_fragment)
+						instanceof YoutubeFragment f)) {
 					return false;
-				f.loadUrl(request.getUrl().toString());
+				}
+
+				f.loadUrl(target.toString());
 				return true;
 			} catch (IllegalArgumentException ex) {
 				Log.d(ex);
@@ -77,14 +91,17 @@ public class FermataWebClient extends WebViewClientCompat {
 
 	public static boolean isYoutubeUri(Uri uri) {
 		String host = uri.getHost();
-		return ((host != null) && ((host.endsWith("youtube.com") && !host.endsWith("tv.youtube.com")) ||
-				host.equals("youtu.be")));
+		return ((host != null)
+				&& ((host.endsWith("youtube.com") && !host.endsWith("tv.youtube.com"))
+				|| host.equals("youtu.be")));
 	}
 
 	@Override
-	public void onReceivedError(@NonNull WebView view, @NonNull WebResourceRequest request,
-															@NonNull WebResourceErrorCompat error) {
-		if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_RESOURCE_ERROR_GET_DESCRIPTION)) {
+	public void onReceivedError(@NonNull WebView view,
+								@NonNull WebResourceRequest request,
+								@NonNull WebResourceErrorCompat error) {
+		if (WebViewFeature.isFeatureSupported(
+				WebViewFeature.WEB_RESOURCE_ERROR_GET_DESCRIPTION)) {
 			Log.e("Web error received: " + error.getDescription());
 		} else {
 			Log.e("Web error received");

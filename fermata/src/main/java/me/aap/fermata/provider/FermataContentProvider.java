@@ -17,7 +17,6 @@ import android.util.Base64;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 
 import me.aap.fermata.BuildConfig;
@@ -38,7 +37,7 @@ public class FermataContentProvider extends ContentProvider {
 	public static boolean isSupportedFileScheme(String scheme) {
 		if (scheme == null) return false;
 		return switch (scheme) {
-			case "http", "https", "file", SCHEME_CONTENT, SCHEME_ANDROID_RESOURCE -> true;
+			case "http", "https", SCHEME_CONTENT, SCHEME_ANDROID_RESOURCE -> true;
 			default -> FermataApplication.get().getVfsManager().isSupportedScheme(scheme);
 		};
 	}
@@ -85,9 +84,7 @@ public class FermataContentProvider extends ContentProvider {
 			if (s == null) throw new FileNotFoundException(uri.toString());
 
 			switch (s) {
-				case "file" -> {
-					return ParcelFileDescriptor.open(new File(u.toString().substring(6)), MODE_READ_ONLY);
-				}
+				case "file" -> throw new FileNotFoundException("Direct file access is disabled");
 				case "http", "https" -> {
 					try {
 						return ParcelFileDescriptor.open(
@@ -104,7 +101,9 @@ public class FermataContentProvider extends ContentProvider {
 				}
 			}
 		} else if (pref.equals(ADDON_PREF)) {
-			return info.getAddon().openFile(info.getUri());
+			FermataContentAddon addon = info.getAddon();
+			if (addon == null) throw new FileNotFoundException(uri.toString());
+			return addon.openFile(info.getUri());
 		}
 
 		throw new FileNotFoundException(uri.toString());
@@ -118,7 +117,7 @@ public class FermataContentProvider extends ContentProvider {
 	@Nullable
 	@Override
 	public Cursor query(@NonNull Uri uri, @Nullable String[] projection, @Nullable String selection,
-											@Nullable String[] selectionArgs, @Nullable String sortOrder) {
+						@Nullable String[] selectionArgs, @Nullable String sortOrder) {
 		UriInfo info = UriInfo.parse(uri);
 		if (info == null) return null;
 		MatrixCursor c = new MatrixCursor(new String[]{"_display_name", "mime_type"});
@@ -141,13 +140,13 @@ public class FermataContentProvider extends ContentProvider {
 
 	@Override
 	public int delete(@NonNull Uri uri, @Nullable String selection,
-										@Nullable String[] selectionArgs) {
+					  @Nullable String[] selectionArgs) {
 		return 0;
 	}
 
 	@Override
 	public int update(@NonNull Uri uri, @Nullable ContentValues values, @Nullable String selection,
-										@Nullable String[] selectionArgs) {
+					  @Nullable String[] selectionArgs) {
 		return 0;
 	}
 
@@ -169,27 +168,35 @@ public class FermataContentProvider extends ContentProvider {
 			return parse(uri.toString());
 		}
 
+		@Nullable
 		static UriInfo parse(String uri) {
-			if (uri.startsWith(IMG_PREF)) {
-				return new UriInfo(
-						new String(Base64.decode(uri.substring(IMG_PREF.length()), URL_SAFE), US_ASCII),
-						IMG_PREF, null, null);
-			} else if (uri.startsWith(ADDON_PREF)) {
-				int idx = uri.indexOf('/', ADDON_PREF.length());
-				if (idx < 0) return null;
-				String name = uri.substring(ADDON_PREF.length(), idx);
-				FermataAddon a = AddonManager.get().getAddon(name);
-				if (!(a instanceof FermataContentAddon)) return null;
-				int end = uri.lastIndexOf('/');
-
-				if (end == idx) {
-					return new UriInfo(new String(Base64.decode(uri.substring(idx + 1), URL_SAFE), US_ASCII),
-							ADDON_PREF, null, (FermataContentAddon) a);
-				} else {
+			try {
+				if (uri.startsWith(IMG_PREF)) {
 					return new UriInfo(
-							new String(Base64.decode(uri.substring(idx + 1, end), URL_SAFE), US_ASCII),
-							ADDON_PREF, uri.substring(end + 1), (FermataContentAddon) a);
+							new String(Base64.decode(uri.substring(IMG_PREF.length()), URL_SAFE), US_ASCII),
+							IMG_PREF, null, null);
+				} else if (uri.startsWith(ADDON_PREF)) {
+					int idx = uri.indexOf('/', ADDON_PREF.length());
+					if (idx < 0) return null;
+
+					String name = uri.substring(ADDON_PREF.length(), idx);
+					FermataAddon a = AddonManager.get().getAddon(name);
+					if (!(a instanceof FermataContentAddon)) return null;
+
+					int end = uri.lastIndexOf('/');
+
+					if (end == idx) {
+						return new UriInfo(
+								new String(Base64.decode(uri.substring(idx + 1), URL_SAFE), US_ASCII),
+								ADDON_PREF, null, (FermataContentAddon) a);
+					} else {
+						return new UriInfo(
+								new String(Base64.decode(uri.substring(idx + 1, end), URL_SAFE), US_ASCII),
+								ADDON_PREF, uri.substring(end + 1), (FermataContentAddon) a);
+					}
 				}
+			} catch (IllegalArgumentException ex) {
+				Log.e(ex, "Invalid content URI");
 			}
 
 			return null;
@@ -211,8 +218,9 @@ public class FermataContentProvider extends ContentProvider {
 		}
 
 		public String getType() {
-			return (addon != null) ? addon.getFileType(uri, getDisplayName()) :
-					FileUtils.getMimeType(uri.getPath());
+			return (addon != null)
+					? addon.getFileType(uri, getDisplayName())
+					: FileUtils.getMimeType(uri.getPath());
 		}
 
 		public FermataContentAddon getAddon() {

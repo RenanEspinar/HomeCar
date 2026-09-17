@@ -14,6 +14,7 @@ import android.view.LayoutInflater;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -53,31 +54,13 @@ import me.aap.utils.ui.view.FloatingButton;
 import me.aap.utils.ui.view.NavBarView;
 import me.aap.utils.ui.view.ToolBarView;
 
-/**
- * HOME CAR browser fragment.
- *
- * In the Android Auto build this fragment is the complete Home Car UI:
- * - fixed Home Assistant entry URL
- * - no Fermata toolbar
- * - no Fermata navigation bar
- * - no media control panel
- * - no floating button
- */
 @Keep
 @SuppressWarnings("unused")
 public class WebBrowserFragment extends MainActivityFragment
 		implements OverlayMenu.SelectionHandler, MainActivityListener {
 
-
 	private boolean fullScreenOnResume;
 
-	/*
-	 * HOME CAR:
-	 * The stock MainActivityFragment returns Fermata's global NavBarMediator.
-	 * That mediator repopulates Folder/Favorites/Playlists/Web/Menu every time
-	 * the browser fragment becomes active. We replace it with a mediator that
-	 * never creates buttons and forces the navigation bar to zero size.
-	 */
 	private static final NavBarMediator HOME_CAR_NAV_BAR = new NavBarMediator() {
 		@Override
 		public void enable(NavBarView nb, ActivityFragment f) {
@@ -94,9 +77,6 @@ public class WebBrowserFragment extends MainActivityFragment
 		}
 	};
 
-	/*
-	 * Same idea for Fermata's floating menu/back button.
-	 */
 	private static final FloatingButton.Mediator HOME_CAR_FLOATING_BUTTON =
 			new FloatingButton.Mediator() {
 				@Override
@@ -167,11 +147,6 @@ public class WebBrowserFragment extends MainActivityFragment
 				chromeClient
 		);
 
-		/*
-		 * HOME CAR:
-		 * The server is configurable and persisted. The same URL is therefore
-		 * used on the phone and in Android Auto.
-		 */
 		if (BuildConfig.AUTO) {
 			webView.loadUrl(addon.getHomeUrl());
 		} else {
@@ -181,25 +156,24 @@ public class WebBrowserFragment extends MainActivityFragment
 		ImageButton settingsButton =
 				view.findViewById(R.id.homeCarSettingsButton);
 
-		if (settingsButton != null) {
-			settingsButton.setOnClickListener(v -> showHomeCarSettings());
-		}
-
 		MainActivityDelegate
 				.getActivityDelegate(ctx)
 				.onSuccess(a -> {
 					registerListeners(a);
+
+					if (settingsButton != null) {
+						boolean inCar = a.isCarActivityNotMirror();
+						settingsButton.setVisibility(inCar ? View.GONE : View.VISIBLE);
+
+						if (!inCar) {
+							settingsButton.setOnClickListener(v -> showHomeCarSettings());
+						}
+					}
+
 					enforceHomeCarUi(a, true);
 				});
 	}
 
-	/**
-	 * Removes every piece of Fermata chrome from the Android Auto UI.
-	 *
-	 * The delayed second pass is intentional: Fermata can update the
-	 * toolbar/navbar while the fragment is being attached, so we hide
-	 * everything again after the fragment transaction has settled.
-	 */
 	private void enforceHomeCarUi(
 			MainActivityDelegate a,
 			boolean delayedPass
@@ -229,13 +203,6 @@ public class WebBrowserFragment extends MainActivityFragment
 		}
 	}
 
-
-	/**
-	 * HOME CAR server configuration.
-	 *
-	 * The setting lives in the web add-on SharedPreferences, so changing it
-	 * on the phone immediately changes the server used by Android Auto too.
-	 */
 	private void showHomeCarSettings() {
 		WebBrowserAddon addon = getAddon();
 		FermataWebView webView = getWebView();
@@ -252,6 +219,7 @@ public class WebBrowserFragment extends MainActivityFragment
 				InputType.TYPE_TEXT_VARIATION_URI
 		);
 		input.setText(addon.getHomeUrl());
+		input.setImeOptions(EditorInfo.IME_ACTION_DONE);
 
 		int pad = (int) (20 * ctx.getResources().getDisplayMetrics().density);
 
@@ -281,6 +249,22 @@ public class WebBrowserFragment extends MainActivityFragment
 				.create();
 
 		dialog.setOnShowListener(d -> {
+			int actionColor = 0xFF8AB4F8;
+			dialog.getButton(DialogInterface.BUTTON_POSITIVE).setTextColor(actionColor);
+			dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setTextColor(actionColor);
+			dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setTextColor(actionColor);
+
+			input.setOnEditorActionListener((v, actionId, event) -> {
+				if ((actionId == EditorInfo.IME_ACTION_DONE)
+						|| (actionId == EditorInfo.IME_ACTION_GO)
+						|| (actionId == EditorInfo.IME_ACTION_SEND)) {
+					dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick();
+					return true;
+				}
+
+				return false;
+			});
+
 			dialog.getButton(DialogInterface.BUTTON_POSITIVE)
 					.setOnClickListener(v -> {
 						String raw = input.getText().toString().trim();
@@ -382,10 +366,6 @@ public class WebBrowserFragment extends MainActivityFragment
 			FermataWebView v = getWebView();
 
 			if (v != null) {
-				/*
-				 * Calling onResume here prevents video from freezing
-				 * when returning to Home Car.
-				 */
 				v.onResume();
 
 				MainActivityDelegate
@@ -401,10 +381,6 @@ public class WebBrowserFragment extends MainActivityFragment
 			}
 		}
 
-		/*
-		 * HOME CAR:
-		 * Enforce browser-only mode every time the fragment resumes.
-		 */
 		if (BuildConfig.AUTO) {
 			MainActivityDelegate
 					.getActivityDelegate(requireContext())
@@ -528,10 +504,6 @@ public class WebBrowserFragment extends MainActivityFragment
 
 	@Override
 	public ToolBarView.Mediator getToolBarMediator() {
-		/*
-		 * HOME CAR:
-		 * There is no URL/search toolbar in Android Auto.
-		 */
 		if (BuildConfig.AUTO) {
 			return ToolBarView.Mediator.Invisible.instance;
 		}
@@ -558,10 +530,6 @@ public class WebBrowserFragment extends MainActivityFragment
 	public void contributeToNavBarMenu(
 			OverlayMenu.Builder b
 	) {
-		/*
-		 * Home Car does not expose this menu in Android Auto,
-		 * but we keep the original implementation for non-Auto builds.
-		 */
 		if (BuildConfig.AUTO) return;
 
 		WebBrowserAddon a = getAddon();

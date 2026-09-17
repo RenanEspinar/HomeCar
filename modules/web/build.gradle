@@ -9,16 +9,10 @@ android {
 ext {
     addons = [
             [
-                    name : 'youtube',
-                    icon : 'youtube',
-                    class: 'me.aap.fermata.addon.web.yt.YoutubeAddon',
-                    order: 2
-            ],
-            [
                     name : 'web_browser',
                     icon : 'web',
                     class: 'me.aap.fermata.addon.web.WebBrowserAddon',
-                    order: 3
+                    order: 1
             ]
     ]
 }

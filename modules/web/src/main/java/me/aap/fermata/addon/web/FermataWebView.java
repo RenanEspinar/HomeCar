@@ -87,11 +87,12 @@ public class FermataWebView extends WebView
 		s.setDisplayZoomControls(false);
 		s.setDatabaseEnabled(true);
 		s.setDomStorageEnabled(true);
-		s.setAllowFileAccess(true);
+		s.setAllowFileAccess(false);
+		s.setAllowContentAccess(false);
 		s.setLoadWithOverviewMode(true);
 		s.setJavaScriptEnabled(true);
 		s.setMediaPlaybackRequiresUserGesture(false);
-		s.setJavaScriptCanOpenWindowsAutomatically(true);
+		s.setJavaScriptCanOpenWindowsAutomatically(false);
 
 		addJavascriptInterface(createJsInterface(), FermataJsInterface.NAME);
 		CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);

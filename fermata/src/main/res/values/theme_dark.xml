@@ -30,13 +30,13 @@
         <item name="colorPrimarySurface">#1F1331</item>
         <item name="colorOnPrimarySurface">?colorOnPrimary</item>
 
-        <item name="colorAccent">?colorSecondaryVariant</item>
+        <item name="colorAccent">#8AB4F8</item>
         <item name="rippleColor">?colorAccent</item>
 
         <item name="android:textColorHint">#A1A7B3</item>
 
         <item name="colorControlNormal">?boxStrokeColor</item>
-        <item name="colorControlActivated">?colorOnPrimary</item>
+        <item name="colorControlActivated">#8AB4F8</item>
 
     </style>
 

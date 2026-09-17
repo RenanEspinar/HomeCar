@@ -10,6 +10,7 @@ import static me.aap.utils.ui.activity.ActivityListener.FRAGMENT_CONTENT_CHANGED
 
 import android.Manifest;
 import android.content.Context;
+import android.net.Uri;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -232,29 +233,42 @@ public class FermataChromeClient extends WebChromeClient {
 
 	@Override
 	public void onGeolocationPermissionsHidePrompt() {
-		onGeolocationPermissionsShowPrompt(null, null);
 	}
 
 	@Override
 	public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback cb) {
+		if ((origin == null) || (cb == null)) return;
+
+		Uri originUri = Uri.parse(origin);
+
+		if (!isAllowedOrigin(originUri)) {
+			cb.invoke(origin, false, false);
+			return;
+		}
+
 		FutureSupplier<int[]> perm = ActivityDelegate.get(getWebView().getContext()).getAppActivity()
 				.checkPermissions(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION);
-		if (cb != null) {
-			perm.onCompletion((p, f) -> {
-				if (f != null) {
-					Log.e(f);
-					cb.invoke(origin, false, false);
-					return;
-				}
 
-				boolean ok = (p.length == 2) && ((p[0] == PERMISSION_GRANTED) || (p[1] == PERMISSION_GRANTED));
-				cb.invoke(origin, ok, true);
-			});
-		}
+		perm.onCompletion((p, f) -> {
+			if (f != null) {
+				Log.e(f);
+				cb.invoke(origin, false, false);
+				return;
+			}
+
+			boolean ok = (p.length == 2)
+					&& ((p[0] == PERMISSION_GRANTED) || (p[1] == PERMISSION_GRANTED));
+			cb.invoke(origin, ok, true);
+		});
 	}
 
 	@Override
 	public void onPermissionRequest(PermissionRequest request) {
+		if ((request == null) || !isAllowedOrigin(request.getOrigin())) {
+			if (request != null) request.deny();
+			return;
+		}
+
 		Log.d("Permissions requested: ", Arrays.toString(request.getResources()));
 		Map<String, String> perms = new HashMap<>();
 		String[] resources = request.getResources();
@@ -263,7 +277,8 @@ public class FermataChromeClient extends WebChromeClient {
 			switch (p) {
 				case PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
 						perms.put(Manifest.permission.RECORD_AUDIO, p);
-				case PermissionRequest.RESOURCE_VIDEO_CAPTURE -> perms.put(Manifest.permission.CAMERA, p);
+				case PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+						perms.put(Manifest.permission.CAMERA, p);
 				case PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID -> {
 					request.grant(resources);
 					return;
@@ -280,7 +295,6 @@ public class FermataChromeClient extends WebChromeClient {
 		MainActivityDelegate a = MainActivityDelegate.get(getWebView().getContext());
 
 		if (BuildConfig.AUTO && a.isCarActivityNotMirror()) {
-			// Activity.checkPermissions() is not supported by AA
 			Log.d("Granted permissions: ", perms.values());
 			request.grant(perms.values().toArray(new String[0]));
 			return;
@@ -288,6 +302,7 @@ public class FermataChromeClient extends WebChromeClient {
 
 		String[] keys = perms.keySet().toArray(new String[0]);
 		FutureSupplier<int[]> perm = a.getAppActivity().checkPermissions(keys);
+
 		perm.onCompletion((r, err) -> {
 			if (err != null) {
 				Log.e(err, "Permission request failed");
@@ -296,7 +311,9 @@ public class FermataChromeClient extends WebChromeClient {
 				List<String> granted = new ArrayList<>(r.length);
 
 				for (int i = 0; i < r.length; i++) {
-					if (r[i] == PERMISSION_GRANTED) granted.add(perms.get(keys[i]));
+					if (r[i] == PERMISSION_GRANTED) {
+						granted.add(perms.get(keys[i]));
+					}
 				}
 
 				if (granted.isEmpty()) {
@@ -308,6 +325,40 @@ public class FermataChromeClient extends WebChromeClient {
 				}
 			}
 		});
+	}
+
+	private boolean isAllowedOrigin(Uri origin) {
+		if (origin == null) return false;
+
+		WebBrowserAddon addon = getWebView().getAddon();
+		if (addon == null) return false;
+
+		Uri home = Uri.parse(addon.getHomeUrl());
+
+		String originScheme = origin.getScheme();
+		String homeScheme = home.getScheme();
+		String originHost = origin.getHost();
+		String homeHost = home.getHost();
+
+		if ((originScheme == null) || (homeScheme == null)
+				|| (originHost == null) || (homeHost == null)) {
+			return false;
+		}
+
+		return originScheme.equalsIgnoreCase(homeScheme)
+				&& originHost.equalsIgnoreCase(homeHost)
+				&& effectivePort(origin) == effectivePort(home);
+	}
+
+	private static int effectivePort(Uri uri) {
+		int port = uri.getPort();
+		if (port != -1) return port;
+
+		String scheme = uri.getScheme();
+		if ("http".equalsIgnoreCase(scheme)) return 80;
+		if ("https".equalsIgnoreCase(scheme)) return 443;
+
+		return -1;
 	}
 
 	@Override

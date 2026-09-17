@@ -8,6 +8,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.Process;
 import android.os.RemoteException;
 import android.view.MotionEvent;
 
@@ -23,12 +24,24 @@ public class XposedEventDispatcherService extends Service {
 	static final int MSG_MIRROR_MODE = 2;
 	static final int MSG_MOTION_EVENT = 3;
 	static final int MSG_BACK_EVENT = 4;
+
 	private static Messenger activityMessenger;
 	private static int registrationKey;
+
 	private final Messenger messenger = new Messenger(new Handler(Looper.getMainLooper()) {
 		@Override
 		public void handleMessage(@NonNull Message msg) {
+			if (!isAuthorizedUid(msg.sendingUid)) {
+				Log.w("Rejected IPC message from uid: ", msg.sendingUid);
+				return;
+			}
+
 			if (msg.what == MSG_REGISTER) {
+				if (msg.replyTo == null) {
+					Log.w("Rejected registration without reply messenger");
+					return;
+				}
+
 				activityMessenger = msg.replyTo;
 				registrationKey = msg.arg1;
 				Log.i("Activity registered: ", activityMessenger, ", key: ", registrationKey);
@@ -38,10 +51,12 @@ public class XposedEventDispatcherService extends Service {
 					activityMessenger.send(Message.obtain(null, MSG_MIRROR_MODE, mode, 0));
 				} catch (RemoteException err) {
 					Log.e(err);
+					activityMessenger = null;
 				}
 			} else if ((msg.what == MSG_UNREGISTER) && (registrationKey == msg.arg1)) {
 				activityMessenger = null;
-				Log.i("Activity unregistered: ", registrationKey);
+				registrationKey = 0;
+				Log.i("Activity unregistered");
 			}
 		}
 	});
@@ -53,12 +68,27 @@ public class XposedEventDispatcherService extends Service {
 		return messenger.getBinder();
 	}
 
+	private boolean isAuthorizedUid(int uid) {
+		if (uid == Process.myUid()) return true;
+		if (uid < 0) return false;
+
+		String[] packages = getPackageManager().getPackagesForUid(uid);
+		if (packages == null) return false;
+
+		for (String pkg : packages) {
+			if ("com.google.android.projection.gearhead".equals(pkg)) return true;
+		}
+
+		return false;
+	}
+
 	static boolean canDispatchEvent() {
 		return activityMessenger != null;
 	}
 
 	static boolean dispatchBackEvent() {
 		if (!canDispatchEvent()) return false;
+
 		try {
 			activityMessenger.send(Message.obtain(null, MSG_BACK_EVENT));
 			return true;
@@ -71,6 +101,7 @@ public class XposedEventDispatcherService extends Service {
 
 	static boolean dispatchEvent(MotionEvent e) {
 		if (!canDispatchEvent()) return false;
+
 		try {
 			var msg = Message.obtain(null, MSG_MOTION_EVENT);
 			var b = new Bundle();
