@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/2d40f518-d339-4e8d-a337-9cc1152467cf
+
 <img width="987" height="598" alt="Captura de pantalla 2026-09-17 202243" src="https://github.com/user-attachments/assets/27b401d4-e12e-415f-b5be-7581de3537c3" />
 # HomeCar
 
