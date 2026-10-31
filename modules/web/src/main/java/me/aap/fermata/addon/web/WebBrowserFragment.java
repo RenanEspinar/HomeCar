@@ -4,6 +4,7 @@ import static android.os.Build.*;
 import static me.aap.fermata.addon.web.FermataWebClient.isYoutubeUri;
 import static me.aap.fermata.util.Utils.dynCtx;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.Resources;
@@ -14,10 +15,13 @@ import android.view.LayoutInflater;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.Toast;
 
@@ -60,6 +64,9 @@ public class WebBrowserFragment extends MainActivityFragment
 		implements OverlayMenu.SelectionHandler, MainActivityListener {
 
 	private boolean fullScreenOnResume;
+	private static final String HOMECAR_WEB_STATE = "homecar.webview.state";
+	@Nullable private View retainedHomeCarRoot;
+
 
 	private static final NavBarMediator HOME_CAR_NAV_BAR = new NavBarMediator() {
 		@Override
@@ -116,7 +123,14 @@ public class WebBrowserFragment extends MainActivityFragment
 			@Nullable Bundle savedInstanceState
 	) {
 		dynCtx(requireContext());
-		return inflater.inflate(R.layout.browser, container, false);
+		if (BuildConfig.AUTO && retainedHomeCarRoot != null) {
+			ViewParent parent = retainedHomeCarRoot.getParent();
+			if (parent instanceof ViewGroup group) group.removeView(retainedHomeCarRoot);
+			return retainedHomeCarRoot;
+		}
+		View root = inflater.inflate(R.layout.browser, container, false);
+		if (BuildConfig.AUTO) retainedHomeCarRoot = root;
+		return root;
 	}
 
 	@Override
@@ -141,25 +155,51 @@ public class WebBrowserFragment extends MainActivityFragment
 		FermataChromeClient chromeClient =
 				new FermataChromeClient(webView, fullScreenView);
 
-		webView.init(
-				addon,
-				webClient,
-				chromeClient
-		);
-
-		if (BuildConfig.AUTO) {
-			webView.loadUrl(addon.getHomeUrl());
+		boolean reused = BuildConfig.AUTO && (webView.getAddon() != null);
+		if (reused) {
+			// The previous view was detached, not destroyed. No loadUrl():
+			// dashboard DOM, session and WebSocket remain on this instance.
+			addon.getPreferenceStore().addBroadcastListener(webView);
 		} else {
-			webView.loadUrl(addon.getLastUrl());
+			webView.init(addon, webClient, chromeClient);
+			boolean restored = false;
+			if (savedInstanceState != null) {
+				Bundle state = savedInstanceState.getBundle(HOMECAR_WEB_STATE);
+				if (state != null) restored = webView.restoreState(state) != null;
+			}
+			if (restored) {
+				// Android restoreState restores history, not rendered DOM content.
+				// An actual WebView reconstruction necessarily reconnects HA.
+				webView.reload();
+			} else {
+				webView.loadUrl(BuildConfig.AUTO ? addon.getHomeUrl() : addon.getLastUrl());
+			}
 		}
 
 		ImageButton settingsButton =
 				view.findViewById(R.id.homeCarSettingsButton);
+		ImageButton backButton = view.findViewById(R.id.homeCarBackButton);
+		if (backButton != null) {
+			backButton.setVisibility(View.GONE);
+			MainActivityDelegate.getActivityDelegate(ctx).onSuccess(a ->
+					backButton.setVisibility(a.isCarActivityNotMirror() ? View.VISIBLE : View.GONE));
+			backButton.setOnClickListener(v -> {
+				if (!onBackPressed()) {
+					MainActivityDelegate.getActivityDelegate(v.getContext())
+							.onSuccess(a -> a.getAppActivity().finish());
+				}
+			});
+		}
 
 		MainActivityDelegate
 				.getActivityDelegate(ctx)
 				.onSuccess(a -> {
 					registerListeners(a);
+
+					if (!a.isCarActivityNotMirror() &&
+							a.getAppActivity() instanceof Activity phoneActivity) {
+						HomeCarUpdateChecker.check(phoneActivity, false);
+					}
 
 					if (settingsButton != null) {
 						boolean inCar = a.isCarActivityNotMirror();
@@ -223,15 +263,19 @@ public class WebBrowserFragment extends MainActivityFragment
 
 		int pad = (int) (20 * ctx.getResources().getDisplayMetrics().density);
 
-		FrameLayout box = new FrameLayout(ctx);
+		LinearLayout box = new LinearLayout(ctx);
+		box.setOrientation(LinearLayout.VERTICAL);
 		box.setPadding(pad, 0, pad, 0);
-		box.addView(
-				input,
-				new FrameLayout.LayoutParams(
-						ViewGroup.LayoutParams.MATCH_PARENT,
-						ViewGroup.LayoutParams.WRAP_CONTENT
-				)
-		);
+		box.addView(input, new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT));
+
+		Button updateButton = new Button(ctx);
+		updateButton.setText(R.string.home_car_check_updates);
+		box.addView(updateButton, new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT));
+		updateButton.setOnClickListener(v -> HomeCarUpdateChecker.check(requireActivity(), true));
 
 		AlertDialog dialog = new AlertDialog.Builder(ctx)
 				.setTitle(R.string.home_car_server_title)
@@ -311,6 +355,22 @@ public class WebBrowserFragment extends MainActivityFragment
 		});
 
 		dialog.show();
+	}
+
+	@Override
+	public void onSaveInstanceState(@NonNull Bundle outState) {
+		super.onSaveInstanceState(outState);
+		FermataWebView current = getWebView();
+		if (current == null) return;
+		Bundle state = new Bundle();
+		if (current.saveState(state) != null) outState.putBundle(HOMECAR_WEB_STATE, state);
+	}
+
+	@Override
+	public void onDestroy() {
+		// Do not retain an Activity Context beyond the Fragment lifetime.
+		retainedHomeCarRoot = null;
+		super.onDestroy();
 	}
 
 	@Override

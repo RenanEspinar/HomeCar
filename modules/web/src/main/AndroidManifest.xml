@@ -3,9 +3,7 @@
     split="web"
     android:isFeatureSplit="true">
 
-    <!-- The location permissions are used by the web view -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- HomeCar does not require Android geolocation at startup. -->
 
     <dist:module
         dist:instant="false"

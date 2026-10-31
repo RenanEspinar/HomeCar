@@ -3,7 +3,7 @@ if (gradle.ext.enableGoogleServices) apply plugin: 'com.google.gms.google-servic
 android {
     defaultConfig {
         namespace = 'me.aap.fermata'
-        applicationId project.getProperties().getOrDefault('APP_ID', 'me.aap.fermata')
+        applicationId project.getProperties().getOrDefault('APP_ID', 'com.renanespinar.homecar')
         versionCode VERSION_CODE
         versionName VERSION_NAME
         base.archivesName = "homecar-$versionName"

@@ -36,7 +36,6 @@ public class FermataJsInterface {
 	protected void handleEvent(int event, String data) {
 		switch (event) {
 			case JS_EDIT:
-				Log.d("Edit text event: ", data);
 				getWebView().showKeyboard(data);
 				break;
 			case JS_ERR:

@@ -295,8 +295,14 @@ public class FermataChromeClient extends WebChromeClient {
 		MainActivityDelegate a = MainActivityDelegate.get(getWebView().getContext());
 
 		if (BuildConfig.AUTO && a.isCarActivityNotMirror()) {
-			Log.d("Granted permissions: ", perms.values());
-			request.grant(perms.values().toArray(new String[0]));
+			// CarActivity cannot request runtime permissions; only forward OS grants.
+			List<String> granted = new ArrayList<>();
+			for (Map.Entry<String, String> entry : perms.entrySet()) {
+				if (getWebView().getContext().checkSelfPermission(entry.getKey()) == PERMISSION_GRANTED)
+					granted.add(entry.getValue());
+			}
+			if (granted.isEmpty()) request.deny();
+			else request.grant(granted.toArray(new String[0]));
 			return;
 		}
 

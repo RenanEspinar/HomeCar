@@ -14,6 +14,24 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- Always available in Android Auto: back in WebView history, or exit
+         the HomeCar surface when there is no previous page. -->
+    <ImageButton
+        android:id="@+id/homeCarBackButton"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="12dp"
+        android:alpha="0.75"
+        android:background="@drawable/home_car_settings_button"
+        android:contentDescription="@string/home_car_back_or_exit"
+        android:elevation="12dp"
+        android:padding="11dp"
+        android:src="@android:drawable/ic_media_previous"
+        android:tint="#FFFFFF"
+        android:visibility="gone" />
+
     <!--
         HOME CAR server configuration.
         Small, semi-transparent button so it remains available without

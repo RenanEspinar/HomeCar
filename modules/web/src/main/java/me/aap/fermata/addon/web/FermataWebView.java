@@ -22,6 +22,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.CookieManager;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.json.JSONObject;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.EditText;
@@ -55,6 +58,11 @@ import me.aap.utils.ui.view.ToolBarView;
 public class FermataWebView extends WebView
 		implements TextChangedListener, TextView.OnEditorActionListener, PreferenceStore.Listener,
 		MainActivityListener {
+	private static final ExecutorService COOKIE_IO = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "HomeCar-CookieIO");
+		t.setDaemon(true);
+		return t;
+	});
 	private final boolean isCar;
 	private WebBrowserAddon addon;
 	private FermataWebClient webClient;
@@ -87,6 +95,8 @@ public class FermataWebView extends WebView
 		s.setDisplayZoomControls(false);
 		s.setDatabaseEnabled(true);
 		s.setDomStorageEnabled(true);
+		// Chromium's normal HTTP cache; do not force a full network reload.
+		s.setCacheMode(WebSettings.LOAD_DEFAULT);
 		s.setAllowFileAccess(false);
 		s.setAllowContentAccess(false);
 		s.setLoadWithOverviewMode(true);
@@ -236,7 +246,8 @@ public class FermataWebView extends WebView
 				wm.setButtonsVisibility(tb, canGoBack(), canGoForward());
 			}
 
-			CookieManager.getInstance().flush();
+			// flush() may perform synchronous I/O: keep it off the render thread.
+			COOKIE_IO.execute(() -> CookieManager.getInstance().flush());
 		});
 	}
 
@@ -276,9 +287,10 @@ public class FermataWebView extends WebView
 	private void setTextInput(CharSequence text) {
 		if (!BuildConfig.AUTO) return;
 
-		Log.d(text);
+		// Never log or interpolate unescaped text: this can contain passwords.
+		String quotedText = JSONObject.quote(text.toString());
 		loadUrl(
-				"javascript:\n" + "var e =  document.activeElement;\n" + "var text = '" + text + "';\n" +
+				"javascript:\n" + "var e =  document.activeElement;\n" + "var text = " + quotedText + ";\n" +
 						"if (e.isContentEditable) e.innerText = text;\n" + "else e.value = text;\n" +
 						"e.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));\n" +
 						"e.dispatchEvent(new KeyboardEvent('keypress', { bubbles: true }));\n" +

@@ -1157,6 +1157,9 @@ public class MainActivityDelegate extends ActivityDelegate
 	}
 
 	private static String[] getRequiredPermissions() {
+		// HomeCar Auto has no photo, video, or media-library functionality.
+		// Do not request Fermata's legacy startup permissions on the phone.
+		if (AUTO) return new String[0];
 		List<String> perms = new ArrayList<>();
 		perms.add(permission.READ_EXTERNAL_STORAGE);
 		if (VERSION.SDK_INT >= VERSION_CODES.P) {
