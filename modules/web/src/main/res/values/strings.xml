@@ -32,6 +32,8 @@
     <string name="sponsorblock_cat_filler_sub">Aggressive category; disabled by default.</string>
 
     <!-- HOME CAR -->
+    <string name="home_car_check_updates">Buscar actualizaciones en GitHub</string>
+    <string name="home_car_back_or_exit">Back or exit HomeCar</string>
     <string name="home_car_server_settings">HomeCar server settings</string>
     <string name="home_car_server_title">Home Assistant server</string>
     <string name="home_car_server_message">Enter the address HomeCar should open. You can use a domain or a local IP address.</string>

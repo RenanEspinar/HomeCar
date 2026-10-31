@@ -338,6 +338,7 @@ public class WebBrowserAddon implements FermataFragmentAddon, SharedPreferenceSt
 	}
 
 	void setLastUrl(String url) {
+		if (url == null || url.equals(getPreferenceStore().getStringPref(LAST_URL))) return;
 		getPreferenceStore().applyStringPref(LAST_URL, url);
 	}
 

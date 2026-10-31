@@ -2,10 +2,17 @@ package me.aap.fermata.addon.web;
 
 import static me.aap.utils.ui.activity.ActivityListener.FRAGMENT_CONTENT_CHANGED;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.security.KeyChain;
+import android.webkit.ClientCertRequest;
+import android.webkit.WebView;
+import java.security.PrivateKey;
+import java.security.cert.X509Certificate;
 import android.net.Uri;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
 import androidx.webkit.WebResourceErrorCompat;
@@ -25,6 +32,75 @@ import me.aap.utils.log.Log;
  */
 public class FermataWebClient extends WebViewClientCompat {
 	BooleanConsumer loading;
+
+	private static final String TLS_PREFS = "homecar_client_cert";
+
+	@Override
+	public void onReceivedClientCertRequest(WebView view, ClientCertRequest request) {
+		if (!(view instanceof FermataWebView browser)) {
+			request.ignore();
+			return;
+		}
+		WebBrowserAddon addon = browser.getAddon();
+		if (addon == null) {
+			request.ignore();
+			return;
+		}
+		Uri configured = Uri.parse(addon.getHomeUrl());
+		String host = request.getHost();
+		int port = request.getPort();
+		if (!"https".equalsIgnoreCase(configured.getScheme()) || host == null ||
+				configured.getHost() == null ||
+				!host.equalsIgnoreCase(configured.getHost()) ||
+				port != ((configured.getPort() == -1) ? 443 : configured.getPort())) {
+			request.ignore();
+			return;
+		}
+
+		Context ctx = view.getContext();
+		SharedPreferences prefs = ctx.getSharedPreferences(TLS_PREFS, Context.MODE_PRIVATE);
+		String key = host.toLowerCase(java.util.Locale.ROOT) + ":" + port;
+		String savedAlias = prefs.getString(key, null);
+		MainActivityDelegate a = MainActivityDelegate.getActivityDelegate(ctx).peek();
+		if (a != null && a.getAppActivity() instanceof Activity phoneActivity &&
+				!a.isCarActivityNotMirror()) {
+			// KeyChain performs explicit user selection/authorization on the phone.
+			KeyChain.choosePrivateKeyAlias(phoneActivity, alias -> {
+				if (alias == null) {
+					request.ignore();
+					return;
+				}
+				prefs.edit().putString(key, alias).apply();
+				provideClientCertificate(ctx, request, alias);
+			}, request.getKeyTypes(), request.getPrincipals(),
+					Uri.parse("https://" + host + ":" + port), savedAlias);
+		} else if (savedAlias != null) {
+			// The projected CarActivity cannot show the phone KeyChain picker.
+			provideClientCertificate(ctx, request, savedAlias);
+		} else {
+			Log.w("No mTLS client certificate authorized. Open HomeCar on the phone first.");
+			request.ignore();
+		}
+	}
+
+	private static void provideClientCertificate(Context ctx, ClientCertRequest request,
+			String alias) {
+		new Thread(() -> {
+			try {
+				PrivateKey key = KeyChain.getPrivateKey(ctx, alias);
+				X509Certificate[] chain = KeyChain.getCertificateChain(ctx, alias);
+				if (key == null || chain == null || chain.length == 0) {
+					Log.w("Configured mTLS client certificate is unavailable");
+					request.ignore();
+				} else {
+					request.proceed(key, chain);
+				}
+			} catch (Exception ex) {
+				Log.e(ex, "Failed to access authorized mTLS certificate");
+				request.ignore();
+			}
+		}, "HomeCar-KeyChain").start();
+	}
 
 	@Override
 	public void onPageStarted(WebView view, String url, Bitmap favicon) {

@@ -335,7 +335,7 @@ public class SecurityUtils {
 
 			try {
 				ctx = SSLContext.getInstance("TLS");
-				ctx.init(null, new TrustManager[]{InsecureTrustManager.instance}, null);
+				ctx.init(null, null, null);
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
 			}
@@ -373,7 +373,7 @@ public class SecurityUtils {
 				}
 
 				SSLContext ctx = SSLContext.getInstance("TLS");
-				ctx.init(kmf.getKeyManagers(), new TrustManager[]{InsecureTrustManager.instance}, null);
+				ctx.init(kmf.getKeyManagers(), null, null);
 				return ctx;
 			} catch (Exception ex) {
 				throw new RuntimeException(ex);
@@ -394,22 +394,5 @@ public class SecurityUtils {
 		return new JcaX509CertificateConverter().getCertificate(cb.build(cs));
 	}
 
-	private static final class InsecureTrustManager implements X509TrustManager {
-		static final InsecureTrustManager instance = new InsecureTrustManager();
-		private static final X509Certificate[] CERTIFICATES = {};
-
-		@Override
-		public void checkClientTrusted(X509Certificate[] chain, String s) {
-		}
-
-		@Override
-		public void checkServerTrusted(X509Certificate[] chain, String s) {
-		}
-
-		@Override
-		public X509Certificate[] getAcceptedIssuers() {
-			return CERTIFICATES;
-		}
-	}
 }
 

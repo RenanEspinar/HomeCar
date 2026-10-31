@@ -1,0 +1,1 @@
+SHA256 7a489fd7ef0decc8da762b360a8dc15dbab79b4c5bcda2c5eb18c3168eb1d80d  HomeCar-1.0.0-RC2.apk
