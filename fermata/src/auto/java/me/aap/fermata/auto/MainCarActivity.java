@@ -30,12 +30,14 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.TextView.OnEditorActionListener;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.constraintlayout.widget.ConstraintLayout;
@@ -47,6 +49,7 @@ import com.google.android.apps.auto.sdk.CarActivity;
 import com.google.android.apps.auto.sdk.CarUiController;
 
 import me.aap.fermata.R;
+import me.aap.fermata.action.Key;
 import me.aap.fermata.media.service.FermataMediaServiceConnection;
 import me.aap.fermata.ui.activity.FermataActivity;
 import me.aap.fermata.ui.activity.MainActivityDelegate;
@@ -151,7 +154,8 @@ public class MainCarActivity extends CarActivity implements FermataActivity {
 
 	@Override
 	public View getCurrentFocus() {
-		return null;
+		View screen = findViewById(R.id.main_activity);
+		return (screen instanceof ViewGroup group) ? group.findFocus() : null;
 	}
 
 	public boolean isCarActivity() {
@@ -248,6 +252,8 @@ public class MainCarActivity extends CarActivity implements FermataActivity {
 		Log.i(keyEvent);
 		MainActivityDelegate d = delegate.peek();
 		if (d == null) return super.onKeyUp(keyCode, keyEvent);
+		Boolean knob = onDashboardKnob(d, keyEvent);
+		if (knob != null) return knob;
 
 		if (d.getPrefs().useDpadCursor(d)) {
 			switch (keyCode) {
@@ -279,6 +285,8 @@ public class MainCarActivity extends CarActivity implements FermataActivity {
 		Log.i(keyEvent);
 		MainActivityDelegate d = delegate.peek();
 		if (d == null) return super.onKeyDown(keyCode, keyEvent);
+		Boolean knob = onDashboardKnob(d, keyEvent);
+		if (knob != null) return knob;
 		if (!d.getPrefs().useDpadCursor(d)) return d.onKeyDown(keyCode, keyEvent, super::onKeyDown);
 
 		float x = 0;
@@ -362,6 +370,138 @@ public class MainCarActivity extends CarActivity implements FermataActivity {
 		}
 
 		return true;
+	}
+
+	/**
+	 * @return true if HomeCar handled the event, false if Android Auto should
+	 * move between screen portions, or null to keep the normal key path
+	 */
+	@Nullable
+	private Boolean onDashboardKnob(MainActivityDelegate d, KeyEvent event) {
+		if (d.getActiveMenu() != null) return null;
+		int code = event.getKeyCode();
+		boolean focus = (code == KeyEvent.KEYCODE_TAB) || (code == KeyEvent.KEYCODE_NAVIGATE_NEXT) ||
+				(code == KeyEvent.KEYCODE_NAVIGATE_PREVIOUS);
+		boolean activate = (code == KEYCODE_DPAD_CENTER) || (code == KeyEvent.KEYCODE_ENTER) ||
+				(code == KeyEvent.KEYCODE_NUMPAD_ENTER);
+		boolean nudge = isKnobNudge(code);
+		int rotate = knobRotateDirection(code, event);
+		if (rotate != 0) {
+			View screen = findViewById(R.id.main_activity);
+			View knob = focusedKnob(screen);
+			if ((knob != null) || hasKnobTarget(screen)) {
+				if (event.getAction() == KeyEvent.ACTION_DOWN) {
+					if (knob != null) moveKnobSibling(knob, rotate);
+					else focusEdgeKnob(screen, rotate > 0);
+				}
+				return true;
+			}
+		}
+		if (activate) {
+			View screen = findViewById(R.id.main_activity);
+			View focused = (screen instanceof ViewGroup group) ? group.findFocus() : null;
+			if ((focused != null) && "homecar-knob".equals(focused.getTag())) {
+				if (event.getAction() == KeyEvent.ACTION_UP) focused.performClick();
+				return true;
+			}
+		}
+		if (!focus && !activate && !nudge) {
+			if ((event.getAction() == KeyEvent.ACTION_DOWN) && (event.getRepeatCount() == 0) &&
+					(Key.get(code) == null) && (findDashboardWebView() != null)) {
+				Log.i("Unmapped car key code=", code, " source=", event.getSource(), " scan=",
+						event.getScanCode());
+			}
+			return null;
+		}
+		WebView wv = findDashboardWebView();
+		if (wv == null) return null;
+		hideKnobCursor();
+		return wv.dispatchKeyEvent(event);
+	}
+
+	private static int knobRotateDirection(int code, KeyEvent event) {
+		if (code == KeyEvent.KEYCODE_TAB) return event.isShiftPressed() ? -1 : 1;
+		if ((code == KeyEvent.KEYCODE_NAVIGATE_PREVIOUS) || (code == KeyEvent.KEYCODE_NAVIGATE_OUT))
+			return -1;
+		if ((code == KeyEvent.KEYCODE_NAVIGATE_NEXT) || (code == KeyEvent.KEYCODE_NAVIGATE_IN))
+			return 1;
+		return 0;
+	}
+
+	@Nullable
+	private static View focusedKnob(View screen) {
+		if (!(screen instanceof ViewGroup group)) return null;
+		View focused = group.findFocus();
+		return ((focused != null) && "homecar-knob".equals(focused.getTag())) ? focused : null;
+	}
+
+	private static boolean hasKnobTarget(View screen) {
+		return findKnobTarget(screen) != null;
+	}
+
+	@Nullable
+	private static View findKnobTarget(View view) {
+		if ("homecar-knob".equals(view.getTag())) return view;
+		if (!(view instanceof ViewGroup group)) return null;
+		for (int i = 0, n = group.getChildCount(); i < n; i++) {
+			View found = findKnobTarget(group.getChildAt(i));
+			if (found != null) return found;
+		}
+		return null;
+	}
+
+	private static void focusEdgeKnob(View screen, boolean first) {
+		View any = findKnobTarget(screen);
+		if (any == null) return;
+		ViewParent parent = any.getParent();
+		if (!(parent instanceof ViewGroup group) || (group.getChildCount() == 0)) return;
+		View target = group.getChildAt(first ? 0 : group.getChildCount() - 1);
+		target.requestFocusFromTouch();
+	}
+
+	private static boolean moveKnobSibling(View focused, int direction) {
+		ViewParent parent = focused.getParent();
+		if (!(parent instanceof ViewGroup group)) return false;
+		int count = group.getChildCount();
+		int index = group.indexOfChild(focused);
+		if ((index < 0) || (count < 2)) return false;
+		group.getChildAt(Math.floorMod(index + direction, count)).requestFocusFromTouch();
+		return true;
+	}
+
+	private static boolean isKnobNudge(int keyCode) {
+		return switch (keyCode) {
+			case KEYCODE_DPAD_UP, KEYCODE_DPAD_DOWN, KEYCODE_DPAD_LEFT, KEYCODE_DPAD_RIGHT,
+					KEYCODE_DPAD_UP_LEFT, KEYCODE_DPAD_UP_RIGHT, KEYCODE_DPAD_DOWN_LEFT,
+					KEYCODE_DPAD_DOWN_RIGHT, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP,
+					KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT,
+					KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> true;
+			default -> false;
+		};
+	}
+
+	private WebView findDashboardWebView() {
+		View screen = findViewById(R.id.main_activity);
+		return (screen == null) ? null : findVisibleWebView(screen);
+	}
+
+	private static WebView findVisibleWebView(View v) {
+		if (v.getVisibility() != View.VISIBLE) return null;
+		if (v instanceof WebView wv) {
+			if ((wv.getWidth() > 0) && (wv.getHeight() > 0)) return wv;
+		}
+		if (v instanceof ViewGroup vg) {
+			for (int i = vg.getChildCount() - 1; i >= 0; i--) {
+				WebView found = findVisibleWebView(vg.getChildAt(i));
+				if (found != null) return found;
+			}
+		}
+		return null;
+	}
+
+	private void hideKnobCursor() {
+		View cursor = findViewById(R.id.cursor);
+		if (cursor != null) cursor.setVisibility(View.GONE);
 	}
 
 	@Override
