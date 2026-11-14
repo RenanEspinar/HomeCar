@@ -1,0 +1,59 @@
+﻿name: Build HomeCar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build Android Auto bundle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :fermata:bundleAutoDebug --no-daemon
+
+      - name: Generate universal APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          AAB="$(find fermata/build/outputs/bundle -type f -name '*.aab' -path '*autoDebug*' -print -quit)"
+          test -n "$AAB"
+
+          curl -fL --retry 5 \
+            -o /tmp/bundletool.jar \
+            https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar
+
+          java -jar /tmp/bundletool.jar build-apks \
+            --bundle="$AAB" \
+            --output=/tmp/homecar.apks \
+            --mode=universal
+
+          unzip -p /tmp/homecar.apks universal.apk > dist/HomeCar-Auto.apk
+          test -s dist/HomeCar-Auto.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HomeCar-Auto-APK
+          path: dist/HomeCar-Auto.apk
+          if-no-files-found: error
