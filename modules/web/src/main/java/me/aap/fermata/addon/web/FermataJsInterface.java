@@ -33,6 +33,13 @@ public class FermataJsInterface {
 		App.get().run(() -> handleEvent(event, data));
 	}
 
+	@Keep
+	@SuppressWarnings("unused")
+	@JavascriptInterface
+	public void knobTargets(int innerW, int innerH, String packed) {
+		App.get().run(() -> getWebView().setKnobTargets(innerW, innerH, packed));
+	}
+
 	protected void handleEvent(int event, String data) {
 		switch (event) {
 			case JS_EDIT:
